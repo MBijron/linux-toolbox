@@ -34,10 +34,16 @@ xgit() {
 
 _xgit_autocomplete() {
     local cur aliases
-    COMMAND_DIR=~/linux-toolbox
-    cur="${COMP_WORDS[COMP_CWORD]}"
-    aliases=$(grep -h '^#' "$COMMAND_DIR"/* | grep -v '^# xgit' | grep -v '^#!/bin/bash' | cut -d' ' -f2 | sed 's/^#//')
-    COMPREPLY=( $(compgen -W "$aliases" -- "$cur") )
+    cur="${words[CURRENT]}"
+
+    # Capture the output of xgit and split it by newline
+    aliases=("${(@f)$(xgit)}")
+
+    # Remove the first element from the aliases array
+    aliases=("${aliases[@]:0}")
+
+    # Add the remaining aliases as autocomplete suggestions
+    compadd -- "$cur" $aliases
 }
 
-complete -F _xgit_autocomplete xgit
+compdef _xgit_autocomplete xgit
