@@ -2,7 +2,7 @@
 
 xgit() {
     # Directory containing the command files (directory of this script)
-    COMMAND_DIR=~/linux-toolbox
+    COMMAND_DIR=$(dirname $functions_source[xgit])
 
     # Get all available aliases
     if [ -z "$1" ]; then
