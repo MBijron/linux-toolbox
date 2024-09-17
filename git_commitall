@@ -1,0 +1,22 @@
+#!/bin/bash
+# comall
+
+function git_commitall() {
+    commit_message=$1
+
+    if [ -z "$commit_message" ]; then
+        echo "Error: Commit message not set. First argument must be the commit message."
+        return 1
+    fi
+
+    # Check if the current directory is a Git repository
+    if ! git rev-parse --is-inside-work-tree > /dev/null 2>&1; then
+        echo "Error: Not a Git repository. Exiting."
+        return 1
+    fi
+
+
+
+    git add *
+    git commit -am "$commit_message"
+}

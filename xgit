@@ -17,7 +17,7 @@ xgit() {
     command_file=$(grep -l "^# $alias" "$COMMAND_DIR"/git_* | grep -v "$COMMAND_DIR/xgit")
 
     if [ -n "$command_file" ]; then
-        eval "$(basename "$command_file")" "$@"
+        "$(basename "$command_file")" "$@"
     else
         echo "Alias '$alias' not found."
         return 1
@@ -35,7 +35,7 @@ _xgit_autocomplete() {
     aliases=("${aliases[@]:0}")
 
     # Add the remaining aliases as autocomplete suggestions
-    compadd -- "$cur" $aliases
+    compadd -- $aliases
 }
 
 compdef _xgit_autocomplete xgit
