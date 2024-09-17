@@ -1,0 +1,42 @@
+#!/bin/bash
+# switch
+
+git_switch() {
+  search_string=$1
+  branch_index=$2
+
+  # Get all branches matching the search string
+  branches=$(git branch -r | grep "$search_string")
+
+  # Count the number of matching branches
+  branch_count=$(echo "$branches" | wc -l)
+
+  if [ -z "$branch_index" ]; then
+    if [ "$branch_count" -eq 1 ]; then
+      # If only one branch is found, switch to it
+      branch=$(echo "$branches" | sed -n "1p")
+      branch_name=$(echo $branch | sed 's|origin/||' | xargs)
+      git switch $branch_name
+      echo "Switched to branch: $branch_name"
+    else
+      # Print all branches with index if no index is provided
+      echo "Branches found:"
+      echo "$branches" | nl -v 0
+    fi
+  else
+    # Get the branch at the specified index
+    branch=$(echo "$branches" | sed -n "$((branch_index + 1))p")
+
+    if [ -n "$branch" ]; then
+      # Remove the 'origin/' prefix from the branch name
+      branch_name=$(echo $branch | sed 's|origin/||' | xargs)
+
+      # Switch to the branch
+      git switch $branch_name
+
+      echo "Switched to branch: $branch_name"
+    else
+      echo "Branch not found at index $branch_index"
+    fi
+  fi
+}

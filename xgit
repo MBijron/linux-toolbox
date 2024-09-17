@@ -1,31 +1,23 @@
 #!/bin/bash
 
 xgit() {
-    # Directory containing the command files
-    COMMAND_DIR="${0:A:h}"
+    # Directory containing the command files (directory of this script)
+    COMMAND_DIR=~/linux-toolbox
 
-    # Function to get all aliases
-    get_aliases() {
-        grep -h '^#' "$COMMAND_DIR"/git_* | grep -v '^# xgit' | grep -v '^#!/bin/bash' | cut -d' ' -f2 | sed 's/^#//'
-    }
-
-    # If no arguments are provided, print all aliases
+    # Get all available aliases
     if [ -z "$1" ]; then
-        get_aliases
+        grep -h '^#' "$COMMAND_DIR"/git_* | awk '/^# [^xgit]/ {print $2}'
         return 0
     fi
 
-    # Get the alias from the first argument
-    alias="$1"
-    shift
+    # Get the alias from the first argument and shift to remaining arguments
+    alias="$1"; shift
 
-    # Find the corresponding command file
-    command_file=$(grep -l "^# $alias" "$COMMAND_DIR"/* | grep -v "$COMMAND_DIR/xgit" | xargs -n 1 basename)
+    # Find and execute the corresponding command file if it exists
+    command_file=$(grep -l "^# $alias" "$COMMAND_DIR"/git_* | grep -v "$COMMAND_DIR/xgit")
 
-    # If the command file is found, execute it with the remaining arguments
     if [ -n "$command_file" ]; then
-        #source "$command_file"
-        eval "$command_file" "$@"
+        eval "$(basename "$command_file")" "$@"
     else
         echo "Alias '$alias' not found."
         return 1
