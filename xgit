@@ -6,7 +6,7 @@ xgit() {
 
     # Function to get all aliases
     get_aliases() {
-        grep -h '^#' "$COMMAND_DIR"/* | grep -v '^# xgit' | grep -v '^#!/bin/bash' | cut -d' ' -f2 | sed 's/^#//'
+        grep -h '^#' "$COMMAND_DIR"/git_* | grep -v '^# xgit' | grep -v '^#!/bin/bash' | cut -d' ' -f2 | sed 's/^#//'
     }
 
     # If no arguments are provided, print all aliases
