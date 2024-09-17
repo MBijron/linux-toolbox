@@ -1,4 +1,5 @@
 #!/bin/bash
+# switch
 
 switch() {
   search_string=$1

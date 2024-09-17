@@ -1,0 +1,43 @@
+#!/bin/bash
+
+xgit() {
+    # Directory containing the command files
+    COMMAND_DIR=~/linux-toolbox
+
+    # Function to get all aliases
+    get_aliases() {
+        grep -h '^#' "$COMMAND_DIR"/* | grep -v '^# xgit' | grep -v '^#!/bin/bash' | cut -d' ' -f2 | sed 's/^#//'
+    }
+
+    # If no arguments are provided, print all aliases
+    if [ -z "$1" ]; then
+        get_aliases
+        return 0
+    fi
+
+    # Get the alias from the first argument
+    alias="$1"
+    shift
+
+    # Find the corresponding command file
+    command_file=$(grep -l "^# $alias" "$COMMAND_DIR"/* | grep -v "$COMMAND_DIR/xgit" | xargs -n 1 basename)
+
+    # If the command file is found, execute it with the remaining arguments
+    if [ -n "$command_file" ]; then
+        #source "$command_file"
+        eval "$command_file" "$@"
+    else
+        echo "Alias '$alias' not found."
+        return 1
+    fi
+}
+
+_xgit_autocomplete() {
+    local cur aliases
+    COMMAND_DIR=~/linux-toolbox
+    cur="${COMP_WORDS[COMP_CWORD]}"
+    aliases=$(grep -h '^#' "$COMMAND_DIR"/* | grep -v '^# xgit' | grep -v '^#!/bin/bash' | cut -d' ' -f2 | sed 's/^#//')
+    COMPREPLY=( $(compgen -W "$aliases" -- "$cur") )
+}
+
+complete -F _xgit_autocomplete xgit

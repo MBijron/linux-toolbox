@@ -1,4 +1,5 @@
 #!/bin/bash
+# bh
 
 function branchhistory() {
   branches=$(git reflog | grep "checkout" | awk '{print $NF}' | awk '!seen[$0]++' | head -n 10)

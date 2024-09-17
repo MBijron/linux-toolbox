@@ -1,4 +1,5 @@
 #!/bin/bash
+# commits
 
 function commitmessages() {
     # Check if the current directory is a Git repository
