@@ -2,7 +2,7 @@
 
 xgit() {
     # Directory containing the command files
-    COMMAND_DIR=~/linux-toolbox
+    COMMAND_DIR="${0:A:h}"
 
     # Function to get all aliases
     get_aliases() {
