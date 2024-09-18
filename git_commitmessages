@@ -3,18 +3,34 @@
 
 function git_commitmessages() {
     # Check if the current directory is a Git repository
-    if ! git rev-parse --is-inside-work-tree > /dev/null 2>&1; then
-        echo "Error: Not a Git repository. Exiting."
+    if ! git rev-parse --is-inside-work-tree &>/dev/null; then
+        echo "Error: Not in a valid Git repository. Please switch to a valid Git repository."
         return 1
     fi
 
     # Get the current branch name
     current_branch=$(git symbolic-ref --short HEAD)
 
-    # Find the commit where the branch was created by looking for the merge-base with the main branch
-    # Replace 'main' with the default branch of your repository if it's different
-    base_commit=$(git merge-base $current_branch master)
+    # Check if 'master' branch exists
+    if git show-ref --quiet refs/heads/master; then
+        base_branch="master"
+    # Check if 'main' branch exists if 'master' doesn't
+    elif git show-ref --quiet refs/heads/main; then
+        base_branch="main"
+    else
+        echo "Error: Neither 'master' nor 'main' branch exists."
+        return 1
+    fi
 
-    # List commit messages from the current branch (excluding specified patterns), starting from the base commit
-    git log --pretty=format:"- %s" --grep="^\(WIP\|Opt\|Optimization\):" --invert-grep --no-merges --first-parent $base_commit..$current_branch
+    # If current branch is the same as the base branch, show all commit messages
+    if [ "$current_branch" = "$base_branch" ]; then
+        echo "Current branch is '$base_branch'. Showing all commit messages:"
+        git log --pretty=format:"- %s" --grep="^\(WIP\|Opt\|Optimization\):" --invert-grep --no-merges --first-parent
+    else
+        # Find the commit where the branch was created by looking for the merge-base with the base branch
+        base_commit=$(git merge-base $current_branch $base_branch)
+
+        # List commit messages from the current branch (excluding specified patterns), starting from the base commit
+        git log --pretty=format:"- %s" --grep="^\(WIP\|Opt\|Optimization\):" --invert-grep --no-merges --first-parent $base_commit..$current_branch
+    fi
 }

@@ -2,20 +2,31 @@
 # history
 
 function git_branchhistory() {
+  # Check if the current directory is a Git repository
+  if ! git rev-parse --is-inside-work-tree &>/dev/null; then
+      echo "Error: Not in a valid Git repository. Please switch to a valid Git repository."
+      return 1
+  fi
+
   branches=$(git reflog | grep "checkout" | awk '{print $NF}' | awk '!seen[$0]++' | head -n 10)
-  if [ -z "$1" ]; then
-    index=1
-    echo "$branches" | while read branch; do
-      echo "$index: $branch"
-      index=$((index + 1))
-    done
+  if [ -z "$branches" ]; then
+    echo "No recent branches found. Current branch: $current_branch"
   else
-    branch=$(echo "$branches" | sed -n "${1}p")
-    if [ -n "$branch" ]; then
-      git checkout "$branch"
-      echo "Switched to branch '$branch'"
+    if [ -z "$1" ]; then
+      # If no branches found, display the current branch
+      index=1
+      echo "$branches" | while read branch; do
+        echo "$index: $branch"
+        index=$((index + 1))
+      done
     else
-      echo "Invalid index"
+      branch=$(echo "$branches" | sed -n "${1}p")
+      if [ -n "$branch" ]; then
+        git checkout "$branch"
+        echo "Switched to branch '$branch'"
+      else
+        echo "Invalid index"
+      fi
     fi
   fi
 }
