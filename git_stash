@@ -19,4 +19,11 @@ git_stash() {
 
   # Stash all changes
   git stash --include-untracked
+
+  # Verify that there are no more local changes
+  if git diff --quiet && git diff --cached --quiet && [ -z "$(git ls-files --others --exclude-standard)" ]; then
+    echo "Success: No local changes remaining."
+  else
+    echo "Error: There are still local changes after stashing."
+  fi
 }

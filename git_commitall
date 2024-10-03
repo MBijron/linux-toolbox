@@ -2,7 +2,17 @@
 # comall
 
 function git_commitall() {
-    commit_message=$1
+    # First, extract the commit message and check for the "-p" flag
+    commit_message=""
+    push_after_commit=false
+
+    for arg in "$@"; do
+        if [[ "$arg" == "-p" ]]; then
+            push_after_commit=true
+        else
+            commit_message="$arg"
+        fi
+    done
 
     if [ -z "$commit_message" ]; then
         echo "Error: Commit message not set. First argument must be the commit message."
@@ -15,8 +25,22 @@ function git_commitall() {
         return 1
     fi
 
+    # Add all changes to staging
+    git add -A
 
+    # Commit with the provided message
+    if ! git commit -am "$commit_message"; then
+        echo "Error: Commit failed."
+        return 1
+    fi
 
-    git add *
-    git commit -am "$commit_message"
+    # Push if the "-p" flag was provided
+    if $push_after_commit; then
+        if git push; then
+            echo "Push successful."
+        else
+            echo "Error: Push failed."
+            return 1
+        fi
+    fi
 }
