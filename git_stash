@@ -1,0 +1,22 @@
+#!/bin/bash
+# stash
+
+git_stash() {
+  # Check if the current directory is a Git repository
+  if ! git rev-parse --is-inside-work-tree &>/dev/null; then
+      echo "Error: Not in a valid Git repository. Please switch to a valid Git repository."
+      return 1
+  fi
+
+  # Check for local changes (both tracked and untracked files)
+  if git diff --quiet && git diff --cached --quiet && [ -z "$(git ls-files --others --exclude-standard)" ]; then
+    echo "Error: No local changes to stash."
+    return 1
+  fi
+
+  # Stage all changes (both tracked and untracked files)
+  git add -A
+
+  # Stash all changes
+  git stash --include-untracked
+}
