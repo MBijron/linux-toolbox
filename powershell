@@ -1,0 +1,9 @@
+#!/bin/bash
+
+powershell() {
+    # Hardcoded path to PowerShell.exe
+    POWERSHELL_PATH=$(ldir "%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe")
+
+    # Pass all the arguments ($@) to PowerShell
+    "$POWERSHELL_PATH" "$@"
+}

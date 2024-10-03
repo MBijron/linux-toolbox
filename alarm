@@ -1,0 +1,57 @@
+#!/bin/bash
+
+alarm() {
+    # If the input starts with "+", treat it as a number of minutes from now
+    if [[ $1 == "test" ]]; then
+        target_time=$(date -d "now + 3 seconds" +%s)
+        message="${2:-Test alarm triggered after 3 seconds!}"
+    elif [[ $1 =~ ^[\+][0-9]+$ ]]; then
+        # Extract the number of minutes (remove the "+")
+        minutes_from_now=${1#+}
+        
+        # Calculate target time in seconds from now
+        target_time=$(date -d "$minutes_from_now minutes" +%s)
+        
+        message="${2:-It is now $minutes_from_now minutes from now!}"
+    elif [[ $1 =~ ^([0-1]?[0-9]|2[0-3]):([0-5][0-9])$ ]]; then
+        # Extract hours and minutes from the input
+        target_hour=${1%%:*}
+        target_minute=${1##*:}
+
+        # Get the current time in seconds since epoch
+        current_time=$(date +%s)
+
+        # Get the target time today in seconds since epoch
+        target_time=$(date -d "$target_hour:$target_minute" +%s)
+
+        # If the target time is earlier than the current time, set the alarm for tomorrow
+        if [ $target_time -le $current_time ]; then
+            target_time=$(date -d "tomorrow $target_hour:$target_minute" +%s)
+        fi
+
+        message="${2:-It is now $1!}"
+    else
+        echo "Please provide time in hh:mm format or +<minutes> format."
+        return 1
+    fi
+
+    # Get the current time in seconds since epoch
+    current_time=$(date +%s)
+
+    # Calculate the time difference in seconds
+    sleep_seconds=$((target_time - current_time))
+
+    # Run the alarm notification in the background
+    (
+        sleep $sleep_seconds
+        toast alarm "$message"
+    ) &>/dev/null & disown
+
+    if [[ $1 == "test" ]]; then
+        echo "Test alarm set to fire in 3 seconds."
+    elif [[ $1 =~ ^[\+][0-9]+$ ]]; then
+        echo "Alarm set for $minutes_from_now minutes from now."
+    else
+        echo "Alarm set for $1. It will notify you with a Windows pop-up."
+    fi
+}
