@@ -1,0 +1,25 @@
+## Checklist
+
+- [x] JIRA tickets added to JIRA section
+- [ ] Correct labels are set on the MR
+- [ ] Changes are tested locally, if not please describe in the additional information section
+- [ ] Sonar report is acceptable, mention any exceptions in the additional information section
+- [ ] MR is self reviewed and approved
+
+## JIRA
+
+[<CUAC_CODE>](https://ccvgroup.atlassian.net/browse/<CUAC_CODE>)
+
+---
+## Summary
+
+<SUMMARY>
+
+---
+<IF REFACTORINGS>
+## Refactoring
+
+<REFACTORINGS>
+
+---
+</IF>
