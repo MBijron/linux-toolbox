@@ -22,15 +22,33 @@ function git_commitmessages() {
         return 1
     fi
 
+    # Determine whether to filter for "Refactor" or "Optimization"
+    filter_commit=false
+    if [ "$1" = "refactor" ]; then
+        filter_commit=true
+    fi
+
     # If current branch is the same as the base branch, show all commit messages
     if [ "$current_branch" = "$base_branch" ]; then
-        echo "Current branch is '$base_branch'. Showing all commit messages:"
-        git log --pretty=format:"- %s" --grep="^\(WIP\|Opt\|Optimization\):" --invert-grep --no-merges --first-parent
+        if [ "$filter_commit" = true ]; then
+            echo "Current branch is '$base_branch'. Showing refactor and optimization commit messages:"
+            git log --pretty=format:"- %s" --grep="^\(Refactor\|Optimization\):" --no-merges --first-parent |
+            sed -E 's/^(Refactor|Optimization): //I'
+        else
+            echo "Current branch is '$base_branch'. Showing all commit messages:"
+            git log --pretty=format:"- %s" --grep="^\(WIP\|Refactor\|Optimization\):" --invert-grep --no-merges --first-parent
+        fi
     else
         # Find the commit where the branch was created by looking for the merge-base with the base branch
         base_commit=$(git merge-base $current_branch $base_branch)
 
         # List commit messages from the current branch (excluding specified patterns), starting from the base commit
-        git log --pretty=format:"- %s" --grep="^\(WIP\|Opt\|Optimization\):" --invert-grep --no-merges --first-parent $base_commit..$current_branch
+        if [ "$filter_commit" = true ]; then
+            git log --pretty=format:"* %s" --grep="^\(Refactor\|Optimization\):" --no-merges --first-parent $base_commit..$current_branch |
+            sed -E 's/^(Refactor|Optimization): //I'
+        else
+            git log --pretty=format:"* %s" --grep="^\(WIP\|Refactor\|Optimization\):" --invert-grep --no-merges --first-parent $base_commit..$current_branch
+        fi
     fi
 }
+
