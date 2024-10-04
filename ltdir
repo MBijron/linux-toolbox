@@ -1,0 +1,5 @@
+#!/bin/bash
+
+ltdir() {
+    echo $(dirname $functions_source[ltdir])
+}
