@@ -1,3 +1,4 @@
+⠀
 ## Checklist
 
 - [x] JIRA tickets added to JIRA section
@@ -10,16 +11,15 @@
 
 [<CUAC_CODE>](https://ccvgroup.atlassian.net/browse/<CUAC_CODE>)
 
----
 ## Summary
 
 <SUMMARY>
 
----
 <IF REFACTORINGS>
 ## Refactoring
 
 <REFACTORINGS>
 
----
 </IF>
+---
+⠀

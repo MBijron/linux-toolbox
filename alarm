@@ -1,57 +1,48 @@
 #!/bin/bash
 
 alarm() {
-    # If the input starts with "+", treat it as a number of minutes from now
-    if [[ $1 == "test" ]]; then
-        target_time=$(date -d "now + 3 seconds" +%s)
-        message="${2:-Test alarm triggered after 3 seconds!}"
-    elif [[ $1 =~ ^[\+][0-9]+$ ]]; then
-        # Extract the number of minutes (remove the "+")
-        minutes_from_now=${1#+}
-        
-        # Calculate target time in seconds from now
-        target_time=$(date -d "$minutes_from_now minutes" +%s)
-        
-        message="${2:-It is now $minutes_from_now minutes from now!}"
-    elif [[ $1 =~ ^([0-1]?[0-9]|2[0-3]):([0-5][0-9])$ ]]; then
-        # Extract hours and minutes from the input
-        target_hour=${1%%:*}
-        target_minute=${1##*:}
-
-        # Get the current time in seconds since epoch
-        current_time=$(date +%s)
-
-        # Get the target time today in seconds since epoch
-        target_time=$(date -d "$target_hour:$target_minute" +%s)
-
-        # If the target time is earlier than the current time, set the alarm for tomorrow
-        if [ $target_time -le $current_time ]; then
-            target_time=$(date -d "tomorrow $target_hour:$target_minute" +%s)
+    # Check if "at" is installed
+    if ! command -v at &> /dev/null; then
+        echo "'at' command not found. Attempting to install..."
+        if ! sudo apt-get install -y at; then
+            echo "Failed to install 'at'. Please re-run the script with sudo permissions."
+            return 1
         fi
+    fi
 
-        message="${2:-It is now $1!}"
-    else
-        echo "Please provide time in hh:mm format or +<minutes> format."
+    # Check if "atd" is running and start it if not
+    if ! pgrep -x "atd" > /dev/null; then
+        echo "'atd' service is not running. Attempting to start it..."
+        if ! sudo service atd start; then
+            echo "Failed to start 'atd' service. Please check your system configuration."
+            return 1
+        fi
+    fi
+
+    # Locate the full path of the "toast" command
+    toast_path=$(whereis -b toast | awk '{print $2}')
+    if [[ -z "$toast_path" ]]; then
+        echo "Could not find 'toast'. Make sure it is installed and available."
         return 1
     fi
 
-    # Get the current time in seconds since epoch
-    current_time=$(date +%s)
-
-    # Calculate the time difference in seconds
-    sleep_seconds=$((target_time - current_time))
-
-    # Run the alarm notification in the background
-    (
-        sleep $sleep_seconds
-        toast alarm "$message"
-    ) &>/dev/null & disown
-
+    # Handle different time formats
     if [[ $1 == "test" ]]; then
-        echo "Test alarm set to fire in 3 seconds."
-    elif [[ $1 =~ ^[\+][0-9]+$ ]]; then
+        # Set alarm 1 minute from now
+        echo "\"$toast_path\" alarm \"${2:-Test alarm triggered after 1 minute!}\"" | at now + 1 minute
+        echo "Test alarm set to fire in 1 minute."
+    elif [[ $1 =~ ^[\+]?[0-9]+$ ]]; then
+        # Extract the number of minutes (remove the "+")
+        minutes_from_now=${1#+}
+
+        echo "\"$toast_path\" alarm \"${2:-It is now $minutes_from_now minutes from now!}\"" | at now + $minutes_from_now minutes
         echo "Alarm set for $minutes_from_now minutes from now."
+    elif [[ $1 =~ ^([0-1]?[0-9]|2[0-3]):([0-5][0-9])$ ]]; then
+        # If the user passed a time in HH:MM format, pass it directly to 'at'
+        echo "\"$toast_path\" alarm \"${2:-It is now $1!}\"" | at $1
+        echo "Alarm set for $1."
     else
-        echo "Alarm set for $1. It will notify you with a Windows pop-up."
+        echo "Please provide time in hh:mm format or +<minutes> format."
+        return 1
     fi
 }
