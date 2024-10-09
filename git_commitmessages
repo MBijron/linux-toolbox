@@ -32,11 +32,12 @@ function git_commitmessages() {
     if [ "$current_branch" = "$base_branch" ]; then
         if [ "$filter_commit" = true ]; then
             echo "Current branch is '$base_branch'. Showing refactor and optimization commit messages:"
-            git log --pretty=format:"- %s" --grep="^\(Refactor\|Optimization\):" --no-merges --first-parent |
+            git log --pretty=format:"%s" --grep="^\(Refactor\|Optimization\):" --no-merges --first-parent |
             sed -E 's/^(Refactor|Optimization): //I'
         else
             echo "Current branch is '$base_branch'. Showing all commit messages:"
-            git log --pretty=format:"- %s" --grep="^\(WIP\|Refactor\|Optimization\):" --invert-grep --no-merges --first-parent
+            git log --pretty=format:"%s" --grep="^\(WIP\|Refactor\|Optimization\):" --invert-grep --no-merges --first-parent |
+            awk '{gsub(/(\+ )|(\+)/,"\n* "); sub(/^ */, ""); print "* " $0}'
         fi
     else
         # Find the commit where the branch was created by looking for the merge-base with the base branch
@@ -44,10 +45,11 @@ function git_commitmessages() {
 
         # List commit messages from the current branch (excluding specified patterns), starting from the base commit
         if [ "$filter_commit" = true ]; then
-            git log --pretty=format:"* %s" --grep="^\(Refactor\|Optimization\):" --no-merges --first-parent $base_commit..$current_branch |
+            git log --pretty=format:"%s" --grep="^\(Refactor\|Optimization\):" --no-merges --first-parent $base_commit..$current_branch |
             sed -E 's/^(Refactor|Optimization): //I'
         else
-            git log --pretty=format:"* %s" --grep="^\(WIP\|Refactor\|Optimization\):" --invert-grep --no-merges --first-parent $base_commit..$current_branch
+            git log --pretty=format:"%s" --grep="^\(WIP\|Refactor\|Optimization\):" --invert-grep --no-merges --first-parent $base_commit..$current_branch |
+            awk '{gsub(/(\+ )|(\+)/,"\n* "); sub(/^ */, ""); print "* " $0}'
         fi
     fi
 }
