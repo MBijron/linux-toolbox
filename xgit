@@ -6,7 +6,7 @@ xgit() {
 
     # Get all available aliases
     if [ -z "$1" ]; then
-        grep -h '^#' "$COMMAND_DIR"/git_* | awk '/^# [^xgit]/ {print $2}'
+        grep -h '^#' "$COMMAND_DIR"/git_* | awk '/^# / {print $2}'
         return 0
     fi
 
@@ -35,7 +35,7 @@ _xgit_autocomplete() {
     aliases=("${aliases[@]:0}")
 
     # Add the remaining aliases as autocomplete suggestions
-    compadd -- $aliases
+    compadd -X 'Available commands:' -l -- $aliases
 }
 
 compdef _xgit_autocomplete xgit
