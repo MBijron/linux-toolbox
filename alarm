@@ -1,6 +1,48 @@
 #!/bin/bash
 
+# Function to calculate the next occurrence of a given weekday
+next_weekday() {
+    target_day=$(date -d "$1" +%u)  # Convert weekday to a number (1=Monday, 7=Sunday)
+    current_day=$(date +%u)  # Get current day of the week
+
+    if (( target_day >= current_day )); then
+        # If the target day is today or later this week
+        days_to_add=$((target_day - current_day))
+    else
+        # If the target day is earlier in the week, schedule for next week
+        days_to_add=$((7 - current_day + target_day))
+    fi
+    date -d "+$days_to_add day" +"%Y-%m-%d"
+}
+
+# Function to print usage/help message
+alarm_print_help() {
+    echo "Usage: alarm [DATE] [TIME] [MESSAGE]"
+    echo "Sets an alarm using the 'at' command and displays a toast notification."
+    echo
+    echo "Arguments:"
+    echo "  DATE     Optional. Date in 'yyyy-mm-dd' format or a weekday abbreviation (e.g., MON, TUE)."
+    echo "           If a weekday is provided, the alarm will be set for the first next occurrence of that weekday."
+    echo "  TIME     Time in 'HH:MM' format or '+<minutes>' format."
+    echo "           - 'HH:MM': Sets the alarm at the specified time."
+    echo "           - '+<minutes>': Sets the alarm after the specified number of minutes."
+    echo "  MESSAGE  Optional. Custom message to display with the alarm."
+    echo
+    echo "Examples:"
+    echo "  alarm 15:30 \"Meeting starts now!\""
+    echo "  alarm +10 \"Take a break!\""
+    echo "  alarm MON 08:00 \"Monday morning alarm!\""
+    echo "  alarm 2024-10-20 07:00 \"Important event!\""
+    echo "  alarm -help          Displays this help message."
+}
+
 alarm() {
+    # Display help if no arguments are provided or if '-help' is called
+    if [[ $# -eq 0 || $1 == "-help" ]]; then
+        alarm_print_help
+        return 0
+    fi
+
     # Check if "at" is installed
     if ! command -v at &> /dev/null; then
         echo "'at' command not found. Attempting to install..."
@@ -26,23 +68,41 @@ alarm() {
         return 1
     fi
 
+    # Handle date or weekday input
+    if [[ $1 =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
+        # If the input is in yyyy-mm-dd format
+        alarm_date=$1
+    elif [[ $1 =~ ^(MON|TUE|WED|THU|FRI|SAT|SUN)$ ]]; then
+        # If the input is a weekday abbreviation
+        alarm_date=$(next_weekday "$1")
+    fi
+
+    # Shift the arguments if a date or weekday was provided
+    if [[ -n "$alarm_date" ]]; then
+        shift
+    fi
+
     # Handle different time formats
-    if [[ $1 == "test" ]]; then
-        # Set alarm 1 minute from now
-        echo "\"$toast_path\" alarm \"${2:-Test alarm triggered after 1 minute!}\"" | at now + 1 minute
-        echo "Test alarm set to fire in 1 minute."
-    elif [[ $1 =~ ^[\+]?[0-9]+$ ]]; then
+    if [[ $1 =~ ^[\+]?[0-9]+$ ]]; then
         # Extract the number of minutes (remove the "+")
         minutes_from_now=${1#+}
 
-        echo "\"$toast_path\" alarm \"${2:-It is now $minutes_from_now minutes from now!}\"" | at now + $minutes_from_now minutes
+        if [[ -n "$alarm_date" ]]; then
+            echo "\"$toast_path\" alarm \"${2:-It is now $minutes_from_now minutes from now on $alarm_date!}\"" | at $alarm_date now + $minutes_from_now minutes
+        else
+            echo "\"$toast_path\" alarm \"${2:-It is now $minutes_from_now minutes from now!}\"" | at now + $minutes_from_now minutes
+        fi
         echo "Alarm set for $minutes_from_now minutes from now."
     elif [[ $1 =~ ^([0-1]?[0-9]|2[0-3]):([0-5][0-9])$ ]]; then
         # If the user passed a time in HH:MM format, pass it directly to 'at'
-        echo "\"$toast_path\" alarm \"${2:-It is now $1!}\"" | at $1
+        if [[ -n "$alarm_date" ]]; then
+            echo "\"$toast_path\" alarm \"${2:-It is now $1 on $alarm_date!}\"" | at $1 $alarm_date
+        else
+            echo "\"$toast_path\" alarm \"${2:-It is now $1!}\"" | at $1
+        fi
         echo "Alarm set for $1."
     else
-        echo "Please provide time in hh:mm format or +<minutes> format."
+        echo "Please provide time in hh:mm format, +<minutes> format, or a valid date or weekday."
         return 1
     fi
 }
