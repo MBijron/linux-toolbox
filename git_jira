@@ -9,7 +9,7 @@ git_jira() {
     fi
 
     # Get the current ticket number using 'xgit ticket_code'
-    ticket_number=$(git_ticket_code)
+    ticket_number=$(git_ticket)
 
     # Check if 'xgit ticket_code' command failed (non-zero return code)
     if [[ $? -ne 0 ]]; then
