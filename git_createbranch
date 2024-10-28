@@ -43,9 +43,10 @@ git_createbranch() {
     # Remove trailing punctuation marks (., !, ?, etc.)
     branch_name=$(echo "$branch_name" | sed 's/[[:punct:]]*$//')
 
-    if [[ $branch_name != feature/* && $branch_name != bugfix/* && $branch_name != hotfix/* ]]; then
+    if [[ $branch_name != */* ]]; then
         branch_name="feature/$branch_name"
     fi
+
 
 
     # Remove invalid characters: space, ~, ^, :, ?, *, [, and \
