@@ -1,9 +1,23 @@
 #!/bin/bash
 
 powershell() {
-    # Hardcoded path to PowerShell.exe
-    POWERSHELL_PATH=$(ldir "%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe")
+  # Check for the highest version of PowerShell Core
+  CORE_PATH="/mnt/c/Program Files/PowerShell"
+  POWERSHELL_CORE_PATH=""
 
-    # Pass all the arguments ($@) to PowerShell
+  if [ -d "$CORE_PATH" ]; then
+    # Find all versions and pick the highest one
+    highest_version=$(ls "$CORE_PATH" | sort -V | tail -n 1)
+    POWERSHELL_CORE_PATH="$CORE_PATH/$highest_version/pwsh.exe"
+  fi
+
+  # Default PowerShell path (Windows PowerShell v1.0)
+  POWERSHELL_PATH=$(wslpath -u "%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe")
+
+  # Use PowerShell Core if available, otherwise fallback to default path
+  if [ -x "$POWERSHELL_CORE_PATH" ]; then
+    "$POWERSHELL_CORE_PATH" "$@"
+  else
     "$POWERSHELL_PATH" "$@"
+  fi
 }

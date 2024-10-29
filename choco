@@ -1,0 +1,9 @@
+#!/bin/bash
+
+choco() {
+    # Define the path to Chocolatey
+    CHOCO_PATH="/mnt/c/ProgramData/chocolatey/bin/choco.exe"
+
+    # If already running as admin, pass all the arguments to Chocolatey
+    "$CHOCO_PATH" "$@"
+}
