@@ -2,28 +2,86 @@
 # stash
 
 git_stash() {
-  # Check if the current directory is a Git repository
-  if ! git rev-parse --is-inside-work-tree &>/dev/null; then
-      echo "Error: Not in a valid Git repository. Please switch to a valid Git repository."
-      return 1
-  fi
+    if [ "$#" -eq 0 ]; then
+        git_stash_print_usage
+    elif [ "$1" = "create" ] && [ "$#" -eq 2 ]; then
+        git_stash_create "$2"
+    elif [ "$1" = "delete" ] && [ "$#" -eq 2 ]; then
+        git_stash_delete "$2"
+    elif [ "$1" = "revert" ] && [ "$#" -eq 2 ]; then
+        git_stash_revert "$2"
+    elif [ "$1" = "apply" ] && [ "$#" -eq 2 ]; then
+        git_stash_apply "$2"
+    elif [ "$1" = "list" ]; then
+        git_stash_list_named_stashes
+    else
+        git_stash_print_usage
+        echo "Error: Invalid usage"
+    fi
+}
 
-  # Check for local changes (both tracked and untracked files)
-  if git diff --quiet && git diff --cached --quiet && [ -z "$(git ls-files --others --exclude-standard)" ]; then
-    echo "Error: No local changes to stash."
-    return 1
-  fi
+git_stash_print_usage() {
+    echo "Usage:"
+    echo "  create <name>        - Create a stash with the given name"
+    echo "  delete <name>        - Delete a stash with the given name"
+    echo "  revert <name>        - Revert the changes in the stash with the given name"
+    echo "  apply <name>         - Apply the stash with the given name"
+    echo "  list                 - List all named stashes"
+}
 
-  # Stage all changes (both tracked and untracked files)
-  git add -A
+git_stash_create() {
+    local stash_name="$1"
+    git stash save -m "git_stash: $stash_name"
+}
 
-  # Stash all changes
-  git stash --include-untracked
+git_stash_get_named_stash_index() {
+    local stash_name="$1"
+    local stash_index=$(git stash list --format="%gd %gs" | grep -E "^stash@\{[0-9]+\} .+ git_stash: $stash_name$" | sed 's/stash@{\([0-9]\+\)}.*/\1/')
+    
+    if [ -z "$stash_index" ]; then
+        return 1  # Error status code if no stash is found
+    else
+        echo "$stash_index"
+        return 0
+    fi
+}
 
-  # Verify that there are no more local changes
-  if git diff --quiet && git diff --cached --quiet && [ -z "$(git ls-files --others --exclude-standard)" ]; then
-    echo "Success: No local changes remaining."
-  else
-    echo "Error: There are still local changes after stashing."
-  fi
+git_stash_delete() {
+    local stash_name="$1"
+    local stash_index
+    stash_index=$(git_stash_get_named_stash_index "$stash_name") || {
+        echo "Error: Named stash '$stash_name' not found."
+        return 1
+    }
+    git stash drop "stash@{$stash_index}"
+}
+
+git_stash_revert() {
+    local stash_name="$1"
+    local stash_index
+    stash_index=$(git_stash_get_named_stash_index "$stash_name") || {
+        echo "Error: Named stash '$stash_name' not found."
+        return 1
+    }
+    git stash show -p "stash@{$stash_index}" | git apply -R
+}
+
+git_stash_apply() {
+    local stash_name="$1"
+    local stash_index
+    stash_index=$(git_stash_get_named_stash_index "$stash_name") || {
+        echo "Error: Named stash '$stash_name' not found."
+        return 1
+    }
+    git stash apply "stash@{$stash_index}"
+}
+
+git_stash_list_named_stashes() {
+    local stashes=$(git stash list --format="%gd %gs" | grep -E "^stash@\{[0-9]+\} .+ git_stash: " | sed 's/.*git_stash: //')
+    if [ -z "$stashes" ]; then
+        echo "No named stashes found."
+    else
+        echo "Named stashes:"
+        echo "$stashes"
+    fi
 }
