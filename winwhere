@@ -1,0 +1,7 @@
+#!/bin/bash
+
+winwhere() {
+    output=$(where.exe $@ | head -n 1 | tr -d '\r')
+    first=$(udir "$(printf '%s\n' "$output")")
+    echo "$first"
+}

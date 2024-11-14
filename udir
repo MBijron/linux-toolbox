@@ -1,0 +1,20 @@
+#!/bin/bash
+
+udir() {
+    local win_path=$1
+    
+    # Convert backslashes to forward slashes
+    win_path=${win_path//\\//}
+    
+    # Check if the path is absolute or relative
+    if [[ $win_path =~ ^([a-zA-Z]): ]]; then
+        # Extract drive letter and convert to lowercase
+        local drive_letter=${win_path[1]}
+        drive_letter=${drive_letter:l}
+        local path_part=${win_path:3}
+        echo "/mnt/$drive_letter/$path_part"
+    else
+        # Relative path
+        echo "$win_path"
+    fi
+}

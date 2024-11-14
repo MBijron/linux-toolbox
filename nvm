@@ -1,0 +1,15 @@
+#!/bin/bash
+
+nvm() {
+    # Define the path to nvm
+    NVM_PATH=$(udir "C:\ProgramData\nvm\nvm.exe")
+
+    # Check if NVM_PATH exists and is executable
+    if [ -x "$NVM_PATH" ]; then
+        # If NVM_PATH exists, pass all the arguments to nvm
+        "$NVM_PATH" "$@"
+    else
+        # If NVM_PATH does not exist, print an error message
+        echo "Error: nvm not found. Please ensure nvm is installed and in the specified location."
+    fi
+}

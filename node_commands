@@ -1,0 +1,29 @@
+#!/bin/bash
+
+npm() {
+    # Define the path to npm
+    NPM_PATH=$(winwhere npm)
+
+    # Check if NPM_PATH exists and is executable
+    if [ -x "$NPM_PATH" ]; then
+        # If NPM_PATH exists, pass all the arguments to npm
+        "$NPM_PATH" "$@"
+    else
+        # If NPM_PATH does not exist, print an error message
+        echo "Error: npm not found. Please ensure npm is installed and in your PATH."
+    fi
+}
+
+node() {
+    # Define the path to npm
+    NODE_PATH=$(winwhere node)
+
+    # Check if NODE_PATH exists and is executable
+    if [ -x "$NODE_PATH" ]; then
+        # If NODE_PATH exists, pass all the arguments to npm
+        "$NODE_PATH" "$@"
+    else
+        # If NODE_PATH does not exist, print an error message
+        echo "Error: node not found. Please ensure npm is installed and in your PATH."
+    fi
+}

@@ -1,0 +1,35 @@
+#!/bin/bash
+
+call() {
+    # Usage text for help
+    USAGE="Usage: call <program_name> [arguments...]
+    
+    Arguments:
+      -help    Show this help message
+
+    This function searches for the specified program in the PATH and executes it with any additional arguments provided."
+
+    # Check if at least one argument is given
+    if [ $# -eq 0 ]; then
+        echo "Error: No program name provided."
+        echo "$USAGE"
+        return 1
+    fi
+
+    # Check if -help argument is given
+    if [ "$1" = "-help" ]; then
+        echo "$USAGE"
+        return 0
+    fi
+
+    PROGRAM_NAME=$1
+    shift
+    PROGRAM_PATH=$(winwhere "$PROGRAM_NAME")
+
+    # Check if the program is executable
+    if [ -x "$PROGRAM_PATH" ]; then
+        "$PROGRAM_PATH" "$@"
+    else
+        echo "Error: $PROGRAM_NAME not found. Please ensure npm is installed and in your PATH."
+    fi
+}
