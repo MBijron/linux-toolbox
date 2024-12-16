@@ -1,0 +1,5 @@
+#!/bin/bash
+
+cdtb() {
+    cd "$(udir "$(toolbox-setting toolbox-location)")"
+}
