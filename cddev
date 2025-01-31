@@ -1,0 +1,26 @@
+#!/bin/bash
+
+cddev() {
+    local script_dir="${${(%):-%x}:A:h}"  # Gets the directory of the script
+    local ignore_file="$script_dir/cddev.ignore"
+    local target_path
+
+    # If the ignore file does not exist, prompt the user for a path and save it
+    if [[ ! -f $ignore_file ]]; then
+        echo "Enter the path for cddev:"
+        read -r target_path
+        echo "$target_path" > "$ignore_file"
+    else
+        # Read the path from the file
+        target_path=$(<"$ignore_file")
+    fi
+
+    # Check if the path exists and change directory
+    if [[ -d $target_path ]]; then
+        cd "$target_path"
+    else
+        echo "Path '$target_path' does not exist. Redirecting using cdw..."
+        cdw "$target_path"
+    fi
+}
+
