@@ -6,6 +6,7 @@
 - [ ] Sonar report is acceptable, mention any exceptions in the additional information section
 - [ ] MR is self reviewed and approved
 - [ ] Requirements clarified, where relevant, using code comments, including JIRA ticket number.
+- [ ] `Fix versions` is set on JIRA ticket
 
 ## JIRA
 
