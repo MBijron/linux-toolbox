@@ -24,18 +24,18 @@ xgit() {
     fi
 }
 
-_xgit_autocomplete() {
-    local cur aliases
-    cur="${words[CURRENT]}"
+# _xgit_autocomplete() {
+#     local cur aliases
+#     cur="${words[CURRENT]}"
 
-    # Capture the output of xgit and split it by newline
-    aliases=("${(@f)$(xgit)}")
+#     # Capture the output of xgit and split it by newline
+#     aliases=("${(@f)$(xgit)}")
 
-    # Remove the first element from the aliases array
-    aliases=("${aliases[@]:0}")
+#     # Remove the first element from the aliases array
+#     aliases=("${aliases[@]:0}")
 
-    # Add the remaining aliases as autocomplete suggestions
-    compadd -X 'Available commands:' -l -- $aliases
-}
+#     # Add the remaining aliases as autocomplete suggestions
+#     compadd -X 'Available commands:' -l -- $aliases
+# }
 
-compdef _xgit_autocomplete xgit
+# compdef _xgit_autocomplete xgit
