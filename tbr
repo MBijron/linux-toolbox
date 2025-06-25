@@ -1,0 +1,15 @@
+#!/bin/bash
+
+tbr() {
+  # Loop through each file in the directory
+  for file in "$TBDIR"/*; do
+    # Extract the basename
+    filename="${file##*/}"
+
+    # Check if it's a file and does NOT contain a dot in the filename
+    if [ -f "$file" ] && [[ "$filename" != *.* ]]; then
+      source "$file"
+    fi
+  done
+}
+

@@ -30,6 +30,6 @@ call() {
     if [ -x "$PROGRAM_PATH" ]; then
         "$PROGRAM_PATH" "$@"
     else
-        echo "Error: $PROGRAM_NAME not found. Please ensure npm is installed and in your PATH."
+        echo "Error: $PROGRAM_NAME not found. Please ensure it is installed and in your PATH."
     fi
 }

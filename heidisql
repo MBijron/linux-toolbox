@@ -1,0 +1,20 @@
+#!/bin/bash
+
+heidisql() {
+  #!/usr/bin/env bash
+
+  # Path to HeidiSQL (escaped with quotes for safety)
+  HEIDISQL_PATH="/mnt/c/Program Files/HeidiSQL/heidisql.exe"
+
+  # Check if the file exists
+  if [ ! -f "$HEIDISQL_PATH" ]; then
+    echo "Error: HeidiSQL not found at '$HEIDISQL_PATH'"
+    echo "Make sure it is installed and the path is correct."
+    exit 1
+  fi
+
+  # Call HeidiSQL with all passed arguments
+  "$HEIDISQL_PATH" "$@"
+}
+
+alias heidisql.exe='heidisql'
