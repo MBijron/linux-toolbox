@@ -3,3 +3,5 @@
 cdtb() {
     cd "$(udir "$(toolbox-setting toolbox-location)")"
 }
+
+create_command_wrapper_for_function "cdtb"

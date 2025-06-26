@@ -27,3 +27,6 @@ node() {
         echo "Error: node not found. Please ensure npm is installed and in your PATH."
     fi
 }
+
+create_command_wrapper_for_function "npm"
+create_command_wrapper_for_function "node"

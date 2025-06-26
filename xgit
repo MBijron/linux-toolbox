@@ -24,7 +24,7 @@ xgit() {
     fi
 }
 
-create_command_wrapper_for_function "xgit" "xgit"
+create_command_wrapper_for_function "xgit"
 
 # _xgit_autocomplete() {
 #     local cur aliases

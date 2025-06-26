@@ -6,6 +6,10 @@ create_command_wrapper_for_function() {
   local bin_dir="$TBDIR/bin"
   local wrapper_path="$bin_dir/$wrapper_name"
 
+  if [[ -z "$function_name" ]]; then
+    function_name="$wrapper_name"
+  fi
+
   if [[ -z "$wrapper_name" || -z "$function_name" ]]; then
     echo "Usage: create_command_wrapper_for_function <wrapper-name> <function-name>"
     return 1
@@ -37,3 +41,5 @@ EOF
 
   echo "Wrapper '$wrapper_name' created in $bin_dir, calling function '$function_name'"
 }
+
+create_command_wrapper_for_function "create_command_wrapper_for_function"

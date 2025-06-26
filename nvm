@@ -13,3 +13,5 @@ nvm() {
         echo "Error: nvm not found. Please ensure nvm is installed and in the specified location."
     fi
 }
+
+create_command_wrapper_for_function "nvm"

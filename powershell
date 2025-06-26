@@ -21,3 +21,5 @@ powershell() {
     "$POWERSHELL_PATH" "$@"
   fi
 }
+
+create_command_wrapper_for_function "powershell"

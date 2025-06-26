@@ -33,3 +33,5 @@ call() {
         echo "Error: $PROGRAM_NAME not found. Please ensure it is installed and in your PATH."
     fi
 }
+
+create_command_wrapper_for_function "call"

@@ -5,3 +5,5 @@ winwhere() {
     first=$(udir "$(printf '%s\n' "$output")")
     echo "$first"
 }
+
+create_command_wrapper_for_function "winwhere"
