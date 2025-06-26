@@ -6,4 +6,4 @@ winwhere() {
     echo "$first"
 }
 
-create_command_wrapper_for_function "winwhere"
+_create_command_wrapper_for_function "winwhere"

@@ -14,4 +14,4 @@ nvm() {
     fi
 }
 
-create_command_wrapper_for_function "nvm"
+_create_command_wrapper_for_function "nvm"

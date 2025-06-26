@@ -1,0 +1,45 @@
+#!/bin/bash
+
+_create_command_wrapper_for_function() {
+  local wrapper_name="$1"
+  local function_name="$2"
+  local bin_dir="$TBDIR/bin"
+  local wrapper_path="$bin_dir/$wrapper_name"
+
+  if [[ -z "$function_name" ]]; then
+    function_name="$wrapper_name"
+  fi
+
+  if [[ -z "$wrapper_name" || -z "$function_name" ]]; then
+    echo "Usage: _create_command_wrapper_for_function <wrapper-name> <function-name>"
+    return 1
+  fi
+
+  # If the wrapper already exists, exit silently
+  if [[ -f "$wrapper_path" ]]; then
+    return 0
+  fi
+
+  # Check if the function exists
+  if ! declare -F "$function_name" > /dev/null; then
+    echo "Error: Function '$function_name' not found in current shell."
+    return 2
+  fi
+
+  # Create ~/bin if it doesn't exist
+  mkdir -p "$bin_dir"
+
+  # Create the wrapper script
+  cat > "$wrapper_path" <<EOF
+#!/bin/bash
+source "/toolbox/.core"
+
+"$function_name" "\$@"
+EOF
+
+  chmod +x "$wrapper_path"
+
+  echo "Wrapper '$wrapper_name' created in $bin_dir, calling function '$function_name'"
+}
+
+_create_command_wrapper_for_function "_create_command_wrapper_for_function"

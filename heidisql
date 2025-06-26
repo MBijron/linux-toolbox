@@ -17,5 +17,5 @@ heidisql() {
   "$HEIDISQL_PATH" "$@"
 }
 
-create_command_wrapper_for_function "heidisql.exe" "heidisql"
-create_command_wrapper_for_function "heidisql" "heidisql"
+_create_command_wrapper_for_function "heidisql.exe" "heidisql"
+_create_command_wrapper_for_function "heidisql" "heidisql"

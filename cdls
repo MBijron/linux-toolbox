@@ -1,0 +1,5 @@
+#!/bin/bash
+
+cdls() {
+    cd "$TBDIR"
+}

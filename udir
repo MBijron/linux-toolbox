@@ -19,4 +19,4 @@ udir() {
     fi
 }
 
-create_command_wrapper_for_function "udir"
+_create_command_wrapper_for_function "udir"

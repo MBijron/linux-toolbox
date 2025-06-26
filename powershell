@@ -22,4 +22,4 @@ powershell() {
   fi
 }
 
-create_command_wrapper_for_function "powershell"
+_create_command_wrapper_for_function "powershell"

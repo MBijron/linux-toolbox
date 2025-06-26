@@ -28,5 +28,5 @@ node() {
     fi
 }
 
-create_command_wrapper_for_function "npm"
-create_command_wrapper_for_function "node"
+_create_command_wrapper_for_function "npm"
+_create_command_wrapper_for_function "node"

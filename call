@@ -34,4 +34,4 @@ call() {
     fi
 }
 
-create_command_wrapper_for_function "call"
+_create_command_wrapper_for_function "call"
