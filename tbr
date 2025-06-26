@@ -6,10 +6,15 @@ tbr() {
     # Extract the basename
     filename="${file##*/}"
 
-    # Check if it's a file and does NOT contain a dot in the filename
-    if [ -f "$file" ] && [[ "$filename" != *.* ]]; then
-      source "$file"
+    # Skip if:
+    # - Not a file
+    # - Has a dot anywhere in the name
+    # - Starts with a dot
+    if [ ! -f "$file" ] || [[ "$filename" == *.* ]] || [[ "$filename" == .* ]]; then
+      continue
     fi
+
+    source "$file"
   done
 }
 

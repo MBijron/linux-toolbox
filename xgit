@@ -24,6 +24,8 @@ xgit() {
     fi
 }
 
+create_command_wrapper_for_function "xgit" "xgit"
+
 # _xgit_autocomplete() {
 #     local cur aliases
 #     cur="${words[CURRENT]}"
