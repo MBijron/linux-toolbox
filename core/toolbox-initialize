@@ -1,6 +1,7 @@
 #!/bin/bash
 
 toolbox_initialize() {
+  # Setup bin dir
   local bin_dir="$TBDIR/bin"
 
   mkdir -p "$bin_dir"
@@ -8,5 +9,9 @@ toolbox_initialize() {
   # Add ~/bin to PATH if it's not already there
   if [[ ":$PATH:" != *":$bin_dir:"* ]]; then
     export PATH="$bin_dir:$PATH"
+  fi
+
+  if [ ! -e /toolboxcore ]; then
+    ln -s "$TBDIR/.core" /toolboxcore
   fi
 }
