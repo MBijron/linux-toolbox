@@ -31,10 +31,9 @@ git_mr() {
     fi
     
     # Get the directory of the script
-    COMMAND_DIR=$(ltdir)
     
     # Load the template file
-    template_file="$COMMAND_DIR/git_mr_template.txt"
+    template_file="$TBDIR/xgit_bin/git_mr_template.txt"
     if [ ! -f "$template_file" ]; then
         echo "Error: Template file 'git_mr_template.txt' not found."
         return 1

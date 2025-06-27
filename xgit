@@ -6,7 +6,7 @@ xgit() {
 
     # Get all available aliases
     if [ -z "$1" ]; then
-        grep -h '^#' "$COMMAND_DIR"/git_* | awk '/^# / {print $2}'
+        grep -h '^#' "$COMMAND_DIR"/xgit_bin/git_* | awk '/^# / {print $2}'
         return 0
     fi
 
@@ -14,7 +14,7 @@ xgit() {
     alias="$1"; shift
 
     # Find and execute the corresponding command file if it exists
-    command_file=$(grep -l "^# $alias" "$COMMAND_DIR"/git_* | grep -v "$COMMAND_DIR/xgit")
+    command_file=$(grep -l "^# $alias" "$COMMAND_DIR"/xgit_bin/git_* | grep -v "$COMMAND_DIR/xgit$")
 
     if [ -n "$command_file" ]; then
         "$(basename "$command_file")" "$@"

@@ -7,7 +7,7 @@ call() {
     Arguments:
       -help    Show this help message
 
-    This function searches for the specified program in the PATH and executes it with any additional arguments provided."
+    This function searches for the specified program in the windows PATH and executes it with any additional arguments provided."
 
     # Check if at least one argument is given
     if [ $# -eq 0 ]; then
