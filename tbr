@@ -1,17 +1,23 @@
 #!/bin/bash
 
 tbr() {
+  # First, load all files in $TBDIR/core
+  if [ -d "$TBDIR/core" ]; then
+    find "$TBDIR/core" -type f | while IFS= read -r file; do
+      filename="${file##*/}"
+      if [ -f "$file" ] && [[ "$filename" != *.* ]] && [[ "$filename" != .* ]]; then
+        source "$file"
+      fi
+    done
+  fi
+
   # Loop through each file in the directory
   find "$TBDIR" \
-    -type d \( -name "bin" -o -name ".*" \) -prune -o \
+    -type d \( -name "bin" -o -name "core" -o -name ".*" \) -prune -o \
     -type f -print | while IFS= read -r file; do
     # Extract the basename
     filename="${file##*/}"
 
-    # Skip if:
-    # - Not a file
-    # - Has a dot anywhere in the name
-    # - Starts with a dot
     if [ ! -f "$file" ] || [[ "$filename" == *.* ]] || [[ "$filename" == .* ]]; then
       continue
     fi
