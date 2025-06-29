@@ -10,8 +10,4 @@ toolbox_initialize() {
   if [[ ":$PATH:" != *":$bin_dir:"* ]]; then
     export PATH="$bin_dir:$PATH"
   fi
-
-  if [ ! -e /toolboxcore ]; then
-    ln -s "$TBDIR/.core" /toolboxcore
-  fi
 }
