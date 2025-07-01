@@ -3,18 +3,16 @@
 tbr() {
   # First, load all files in $TBDIR/core
   if [ -d "$TBDIR/core" ]; then
-    find "$TBDIR/core" -type f | while IFS= read -r file; do
+    while IFS= read -r -d '' file; do
       filename="${file##*/}"
       if [ -f "$file" ] && [[ "$filename" != *.* ]] && [[ "$filename" != .* ]]; then
         source "$file"
       fi
-    done
+    done < <(find "$TBDIR/core" -type f -print0)
   fi
 
   # Loop through each file in the directory
-  find "$TBDIR" \
-    -type d \( -name "bin" -o -name "core" -o -name ".*" \) -prune -o \
-    -type f -print | while IFS= read -r file; do
+  while IFS= read -r -d '' file; do
     # Extract the basename
     filename="${file##*/}"
 
@@ -23,5 +21,7 @@ tbr() {
     fi
 
     source "$file"
-  done
+  done < <(find "$TBDIR" \
+    \( -type d \( -name "bin" -o -name "core" -o -name ".*" \) -prune \) -o \
+    \( -type f ! -name ".*" -print0 \))
 }

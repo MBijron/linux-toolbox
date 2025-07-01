@@ -1,27 +1,41 @@
 #!/bin/bash
 
 _create_command_wrapper_for_function() {
-  local wrapper_name="$1"
-  local function_name="$2"
+  local wrapper_name=""
+  local function_name=""
   local bin_dir="$TBDIR/bin"
-  local wrapper_path="$bin_dir/$wrapper_name"
+  local wrapper_path=""
+  local empty_flag=false
+
+  # Parse arguments
+  for arg in "$@"; do
+    if [[ "$arg" == "-empty" ]]; then
+      empty_flag=true
+    elif [[ -z "$wrapper_name" ]]; then
+      wrapper_name="$arg"
+    elif [[ -z "$function_name" ]]; then
+      function_name="$arg"
+    fi
+  done
 
   if [[ -z "$function_name" ]]; then
     function_name="$wrapper_name"
   fi
 
-  if [[ -z "$wrapper_name" || -z "$function_name" ]]; then
-    echo "Usage: _create_command_wrapper_for_function <wrapper-name> <function-name>"
+  if [[ -z "$wrapper_name" || (! $empty_flag && -z "$function_name") ]]; then
+    echo "Usage: _create_command_wrapper_for_function [-empty] <wrapper-name> <function-name>"
     return 1
   fi
+
+  wrapper_path="$bin_dir/$wrapper_name"
 
   # If the wrapper already exists, exit silently
   if [[ -f "$wrapper_path" ]]; then
     return 0
   fi
 
-  # Check if the function exists
-  if ! declare -F "$function_name" > /dev/null; then
+  # If not empty, check if the function exists
+  if ! $empty_flag && ! declare -F "$function_name" > /dev/null; then
     echo "Error: Function '$function_name' not found in current shell."
     return 2
   fi
@@ -30,16 +44,34 @@ _create_command_wrapper_for_function() {
   mkdir -p "$bin_dir"
 
   # Create the wrapper script
-  cat > "$wrapper_path" <<EOF
+  if $empty_flag; then
+    # Create an empty script
+    cat > "$wrapper_path" <<EOF
 #!/bin/bash
-source "/toolbox/.core"
-
-"$function_name" "\$@"
 EOF
+  else
+    # Create the standard wrapper script
+    cat > "$wrapper_path" <<EOF
+#!/bin/bash
+/toolboxcore
+
+if declare -F "$function_name" > /dev/null; then
+  "$function_name" "\$@"
+else
+  echo "Function '$function_name' not found."
+  declare -F "$function_name"
+  exit 1
+fi
+EOF
+  fi
 
   chmod +x "$wrapper_path"
 
-  echo "Wrapper '$wrapper_name' created in $bin_dir, calling function '$function_name'"
+  if $empty_flag; then
+    echo "Empty wrapper '$wrapper_name' created in $bin_dir."
+  else
+    echo "Wrapper '$wrapper_name' created in $bin_dir, calling function '$function_name'."
+  fi
 }
 
 _create_command_wrapper_for_function "_create_command_wrapper_for_function"

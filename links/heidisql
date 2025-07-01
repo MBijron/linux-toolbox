@@ -18,4 +18,3 @@ heidisql() {
 }
 
 _create_command_wrapper_for_function "heidisql.exe" "heidisql"
-_create_command_wrapper_for_function "heidisql" "heidisql"
