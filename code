@@ -1,0 +1,45 @@
+#!/bin/bash
+
+code() {
+    # usage: code_insiders <path>
+    local target="${1:-.}"
+
+    # WSL view of Code - Insiders location
+    local exe="/mnt/c/Program Files/Microsoft VS Code Insiders/Code - Insiders.exe"
+
+    if [ ! -f "$exe" ]; then
+        printf 'Error: "Code - Insiders.exe" not found at %s.\n' "$exe"
+        return 2
+    fi
+
+    # Convert passed path to a Windows path if possible. Accepts either WSL (./, /home/...) or already-windows (C:\...) paths.
+    local win_target="$target"
+    case "$target" in
+        [A-Za-z]:\\*)
+            ;; # already a Windows path
+        *)
+            if command -v wslpath >/dev/null 2>&1; then
+                if [ -e "$target" ]; then
+                    target="$(readlink -f "$target" 2>/dev/null || printf '%s' "$target")"
+                else
+                    printf 'Warning: target "%s" does not exist in WSL filesystem. Passing value through.\n' "$target" >&2
+                fi
+                win_target="$(wslpath -w "$target" 2>/dev/null || printf '%s' "$target")"
+            fi
+            ;;
+    esac
+
+    # Launch (quote everything to handle spaces). Run in background so shell isn't blocked.
+    "$exe" "$win_target" >/dev/null 2>&1 &
+    local launch_status=$?
+    local pid=$!
+
+    if (( launch_status != 0 )); then
+        printf 'Error: Failed to launch "%s" with argument "%s".\n' "$exe" "$win_target"
+        return 3
+    fi
+
+    builtin disown "$pid" 2>/dev/null || true
+
+    return 0
+}
