@@ -712,10 +712,17 @@ try {
 
 try {
     $currentSshCommand = & git config --global --get core.sshCommand 2>$null
-    if ($LASTEXITCODE -ne 0 -or -not $currentSshCommand -or $currentSshCommand -ne 'ssh') {
-        & git config --global core.sshCommand 'ssh' 2>$null
+    $whereSsh = & where.exe ssh 2>$null | Select-Object -First 1
+    if ($LASTEXITCODE -ne 0 -or -not $whereSsh) {
+        Write-Warning 'Unable to resolve ssh executable path via where.exe.'
     } else {
-        Write-ActionStatus -Action 'Skipped' -Message 'Git core.sshCommand already set to ssh.'
+        $normalizedWhereSsh = $whereSsh.Trim().Replace('\','/')
+        if (-not $currentSshCommand -or $currentSshCommand.Trim() -ne $normalizedWhereSsh) {
+            & git config --global core.sshCommand $normalizedWhereSsh 2>$null
+            Write-ActionStatus -Action 'Installed' -Message "Git core.sshCommand updated to $normalizedWhereSsh."
+        } else {
+            Write-ActionStatus -Action 'Skipped' -Message "Git core.sshCommand already set to $normalizedWhereSsh."
+        }
     }
 } catch {
     Write-Warning "Unable to verify or update git core.sshCommand: $_"
