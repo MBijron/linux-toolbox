@@ -827,7 +827,7 @@ function Step-SetChromeAsDefault {
         return New-ActionResult -Success:$false -Status 'Missing' -Message 'Google Chrome executable not found; ensure installation succeeded.'
     }
 
-    Write-InstallStatus -Status 'Running' -Message ("Setting Google Chrome as the default browser via {0}" -f $chromePath)
+    Write-InstallStatus -Status 'Running' -Message ("Setting Google Chrome as the default browser via {0}" -f $chromePath) -Indent '    '
 
     try {
         $process = Start-Process -FilePath $chromePath -ArgumentList '--make-default-browser','--no-first-run','--no-default-browser-check' -WindowStyle Hidden -PassThru -ErrorAction Stop
@@ -943,7 +943,7 @@ function Step-SetupSsh {
             Write-InstallStatus -Status 'Warning' -Message 'Generated key could not be added to ssh-agent; you may need to add it manually.' -Indent '    '
         }
     } else {
-        Write-InstallStatus -Status 'Skipped' -Message ("SSH key reused from {0}; public key not displayed." -f $keyResult.Data.Private)
+        Write-InstallStatus -Status 'Skipped' -Message ("SSH key reused from {0}; public key not displayed." -f $keyResult.Data.Private) -Indent '    '
     }
 
     try {
@@ -953,7 +953,7 @@ function Step-SetupSsh {
 
     $gitSshResult = Set-GitSshCommand
     if ($gitSshResult) {
-        Write-InstallStatus -Status $gitSshResult.Status -Message $gitSshResult.Message
+        Write-InstallStatus -Status $gitSshResult.Status -Message $gitSshResult.Message -Indent '    '
     }
 
     if ($gitSshResult -and -not $gitSshResult.Success) {
