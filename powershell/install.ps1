@@ -785,7 +785,6 @@ function Step-EnsureWsl {
     }
 
     $ready = $false
-    $installed = $false
     try {
         Invoke-InstallCommand -FilePath $wslPath -Arguments @('-l', '-q') | Out-Null
         $ready = ($LASTEXITCODE -eq 0)
@@ -794,24 +793,8 @@ function Step-EnsureWsl {
     }
 
     if (-not $ready) {
-        Write-InstallStatus -Status 'Info' -Message 'WSL not initialized. Installing WSL...'
-        try {
-            Invoke-InstallCommand -FilePath $wslPath -Arguments @('--install') | Out-Null
-            if ($LASTEXITCODE -ne 0) {
-                return New-ActionResult -Success:$false -Status 'InstallFailed' -Message ("WSL install exited with code {0}." -f $LASTEXITCODE)
-            }
-            $installed = $true
-        } catch {
-            return New-ActionResult -Success:$false -Status 'InstallFailed' -Message ("WSL installation failed: {0}" -f $_)
-        }
-
-        Start-Sleep -Seconds 5
-        try {
-            Invoke-InstallCommand -FilePath $wslPath -Arguments @('-l', '-q') | Out-Null
-            $ready = ($LASTEXITCODE -eq 0)
-        } catch {
-            return New-ActionResult -Success:$false -Status 'Unavailable' -Message 'wsl.exe is unavailable after installation; a reboot may be required.'
-        }
+        $message = 'WSL is not installed. Run "wsl --install", reboot Windows, then rerun this script.'
+        return New-ActionResult -Success:$false -Status 'Missing' -Message $message
     }
 
     try {
@@ -823,10 +806,6 @@ function Step-EnsureWsl {
         }
     } catch {
         Write-InstallStatus -Status 'Warning' -Message ("Failed to set WSL default version: {0}" -f $_)
-    }
-
-    if ($installed) {
-        return New-ActionResult -Success:$true -Status 'Installed' -Message 'WSL installation completed successfully.'
     }
 
     return New-ActionResult -Success:$true -Status 'Skipped' -Message 'WSL already installed; skipping setup.'
