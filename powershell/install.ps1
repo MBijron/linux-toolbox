@@ -20,6 +20,7 @@ if ($AdditionalArgs) {
 }
 
 $Script:InstallVerboseEnabled = [bool]$VerboseOutput
+$Script:InstallVerboseLastPrinted = $null
 
 # --- Framework -------------------------------------------------------------
 
@@ -85,7 +86,6 @@ function Write-InstallVerbose {
         $isEnabled = [bool]$Script:InstallVerboseEnabled
         $indent = '        '
         $color = 'DarkGray'
-        $lastLine = $null
     }
 
     process {
@@ -107,8 +107,8 @@ function Write-InstallVerbose {
             if ($null -eq $line) { continue }
             $normalized = ($line -replace '[\u0000\u0008\u0009\u000B\u000C\u000D]', '').Trim()
             if ([string]::IsNullOrWhiteSpace($normalized)) { continue }
-            if ($normalized -eq $lastLine) { continue }
-            $lastLine = $normalized
+            if ($Script:InstallVerboseLastPrinted -eq $normalized) { continue }
+            $Script:InstallVerboseLastPrinted = $normalized
             Write-Host ("{0}{1}" -f $indent, $normalized) -ForegroundColor $color
         }
     }
@@ -160,6 +160,7 @@ function Invoke-InstallCommand {
     $argsArray = if ($Arguments) { $Arguments } else { @() }
 
     if ($Script:InstallVerboseEnabled) {
+        $Script:InstallVerboseLastPrinted = $null
         (Format-InstallCommandLine -Executable $FilePath -Arguments $argsArray) | Write-InstallVerbose
     }
 
