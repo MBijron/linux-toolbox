@@ -1,6 +1,7 @@
 param(
     [switch]$ForceNewSshKey,
     [switch]$NoGit,
+    [switch]$VerboseOutput,
     [Parameter(ValueFromRemainingArguments = $true)][string[]]$AdditionalArgs
 )
 
@@ -10,12 +11,15 @@ if ($AdditionalArgs) {
         switch ($extraArg.ToLowerInvariant()) {
             '--no-git' { $NoGit = $true }
             '--force-new-ssh-key' { $ForceNewSshKey = $true }
+            '--verbose' { $VerboseOutput = $true }
             default {
                 Write-Host ("[Info] Ignoring unrecognized argument '{0}'." -f $extraArg) -ForegroundColor DarkGray
             }
         }
     }
 }
+
+$Script:InstallVerboseEnabled = [bool]$VerboseOutput
 
 # --- Framework -------------------------------------------------------------
 
@@ -68,6 +72,108 @@ function Write-InstallStatus {
     $color = if ($Script:InstallStatusColors.ContainsKey($normalized)) { $Script:InstallStatusColors[$normalized] } else { 'White' }
 
     Write-Host ("{0}[{1}] {2}" -f $Indent, $label, $Message) -ForegroundColor $color
+}
+
+function Write-InstallVerbose {
+    [CmdletBinding()]
+    param(
+        [Parameter(ValueFromPipeline = $true)]
+        $InputObject
+    )
+
+    begin {
+        $isEnabled = [bool]$Script:InstallVerboseEnabled
+        $indent = '        '
+        $color = 'DarkGray'
+        $lastLine = $null
+    }
+
+    process {
+        if (-not $isEnabled) { return }
+        if ($null -eq $InputObject) { return }
+
+        $text = switch ($InputObject) {
+            { $_ -is [string] } { $_ }
+            { $_ -is [scriptblock] } { $_.ToString() }
+            { $_ -is [System.Collections.IEnumerable] } { ($InputObject | Out-String) }
+            default { $_.ToString() }
+        }
+
+        if ([string]::IsNullOrWhiteSpace($text)) { return }
+
+        $lines = [System.Text.RegularExpressions.Regex]::Split($text, '\r?\n')
+
+        foreach ($line in $lines) {
+            if ($null -eq $line) { continue }
+            $normalized = ($line -replace '[\u0000\u0008\u0009\u000B\u000C\u000D]', '').Trim()
+            if ([string]::IsNullOrWhiteSpace($normalized)) { continue }
+            if ($normalized -eq $lastLine) { continue }
+            $lastLine = $normalized
+            Write-Host ("{0}{1}" -f $indent, $normalized) -ForegroundColor $color
+        }
+    }
+}
+
+function Format-InstallCommandLine {
+    param(
+        [Parameter(Mandatory = $true)][string]$Executable,
+        [object[]]$Arguments
+    )
+
+    $parts = @()
+    $exeText = [string]$Executable
+    if ($exeText -match '[\s"`$]') {
+        $parts += '"{0}"' -f $exeText.Replace('"', '\"')
+    } else {
+        $parts += $exeText
+    }
+
+    if ($Arguments) {
+        foreach ($arg in $Arguments) {
+            if ($null -eq $arg) { continue }
+            $text = [string]$arg
+            if ($text.Length -eq 0) {
+                $parts += '""'
+                continue
+            }
+
+            if ($text -match '[\s"`$]') {
+                $escaped = $text.Replace('"', '\"')
+                $parts += '"{0}"' -f $escaped
+            } else {
+                $parts += $text
+            }
+        }
+    }
+
+    return ($parts -join ' ')
+}
+
+function Invoke-InstallCommand {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][string]$FilePath,
+        [object[]]$Arguments,
+        [switch]$CaptureOutput
+    )
+
+    $argsArray = if ($Arguments) { $Arguments } else { @() }
+
+    if ($Script:InstallVerboseEnabled) {
+        (Format-InstallCommandLine -Executable $FilePath -Arguments $argsArray) | Write-InstallVerbose
+    }
+
+    $result = & $FilePath @argsArray 2>&1
+
+    if ($Script:InstallVerboseEnabled -and $result) {
+        $result | Write-InstallVerbose
+    }
+
+    if ($CaptureOutput) {
+        return $result
+    }
+
+    return $null
 }
 
 function Initialize-ExecutionSurface {
@@ -276,7 +382,10 @@ function Invoke-ItemCollection {
 function Set-GitSshCommand {
     $whereSsh = $null
     try {
-        $whereSsh = & where.exe ssh 2>$null | Select-Object -First 1
+        $whereResult = Invoke-InstallCommand -FilePath 'where.exe' -Arguments @('ssh') -CaptureOutput
+        if ($whereResult) {
+            $whereSsh = $whereResult | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -First 1
+        }
     } catch {}
 
     if (-not $whereSsh) {
@@ -287,12 +396,15 @@ function Set-GitSshCommand {
 
     $currentSshCommand = $null
     try {
-        $currentSshCommand = & git config --global --get core.sshCommand 2>$null
+        $currentOutput = Invoke-InstallCommand -FilePath 'git' -Arguments @('config', '--global', '--get', 'core.sshCommand') -CaptureOutput
+        if ($currentOutput) {
+            $currentSshCommand = ($currentOutput | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -First 1)
+        }
     } catch {}
 
     if (-not $currentSshCommand -or $currentSshCommand.Trim() -ne $normalizedWhereSsh) {
         try {
-            & git config --global core.sshCommand $normalizedWhereSsh 2>$null
+            Invoke-InstallCommand -FilePath 'git' -Arguments @('config', '--global', 'core.sshCommand', $normalizedWhereSsh) | Out-Null
             return New-ActionResult -Success:$true -Status 'Installed' -Message ("Git core.sshCommand updated to {0}." -f $normalizedWhereSsh)
         } catch {
             return New-ActionResult -Success:$true -Status 'Warning' -Message ("Unable to update git core.sshCommand: {0}" -f $_)
@@ -310,6 +422,76 @@ function Get-WslExecutablePath {
     $fallback = Join-Path $env:WinDir 'System32\\wsl.exe'
     if (Test-Path $fallback) { return $fallback }
     return $null
+}
+
+function Get-WslDistributionMatches {
+    param(
+        [Parameter(Mandatory = $true)][string]$WslPath,
+        [Parameter(Mandatory = $true)][string]$DistributionName
+    )
+
+    $collected = @()
+    $commands = @(
+        @('-l', '-q'),
+        @('-l', '-v')
+    )
+
+    foreach ($args in $commands) {
+        $output = $null
+        try {
+            $output = Invoke-InstallCommand -FilePath $WslPath -Arguments $args -CaptureOutput
+        } catch {
+            $output = $null
+        }
+
+        if ($output) {
+            foreach ($line in $output) {
+                if ([string]::IsNullOrWhiteSpace($line)) { continue }
+                $collected += $line.ToString()
+            }
+        }
+
+        if ($collected.Count -gt 0) { break }
+    }
+
+    if ($collected.Count -eq 0) { return @() }
+
+    $needle = $DistributionName.Trim().ToLowerInvariant()
+    $found = @()
+
+    foreach ($raw in $collected) {
+        if (-not $raw) { continue }
+        $text = $raw.Trim()
+        if (-not $text) { continue }
+
+        $normalized = ($text -replace '\s*\(Default\)', '')
+        $normalized = ($normalized -replace '\s*\(Running\)', '')
+        $normalized = ($normalized -replace '\s*\(Stopped\)', '')
+        $normalized = ($normalized -replace '\s*\(Installing\)', '')
+        $normalized = ($normalized -replace '\s*\(Unregistering\)', '')
+        $normalized = $normalized.Trim()
+
+        if ($normalized.StartsWith('*')) {
+            $normalized = $normalized.TrimStart('*').Trim()
+        }
+
+        $token = [regex]::Match($normalized, '^[^\s]+')
+        $candidate = if ($token.Success) { $token.Value } else { $normalized }
+        if (-not $candidate) { continue }
+
+        $candidateLower = $candidate.ToLowerInvariant()
+        if ($candidateLower -eq 'name') { continue }
+        if ($candidateLower -eq $needle -or $candidateLower.StartsWith("$needle-")) {
+            $found += $candidate
+            continue
+        }
+
+        if ($normalized.ToLowerInvariant().StartsWith($needle)) {
+            $found += $normalized
+        }
+    }
+
+    return $found | Sort-Object -Unique
 }
 
 function Ensure-OpenSshAgent {
@@ -342,7 +524,7 @@ function Generate-And-Register-SshKey {
     $sshDir = Join-Path $env:USERPROFILE '.ssh'
     if (-not (Test-Path $sshDir)) {
         New-Item -ItemType Directory -Path $sshDir | Out-Null
-        try { icacls $sshDir /inheritance:r | Out-Null } catch {}
+        try { Invoke-InstallCommand -FilePath 'icacls' -Arguments @($sshDir, '/inheritance:r') | Out-Null } catch {}
     }
 
     $initialKeyPath = Join-Path $sshDir $BaseName
@@ -377,7 +559,7 @@ function Generate-And-Register-SshKey {
     Write-InstallStatus -Status 'Running' -Message ("Generating SSH key at {0}" -f $keyPath)
 
     try {
-        & ssh-keygen -t ed25519 -f $keyPath -C $BaseName -N '' *> $null
+        Invoke-InstallCommand -FilePath 'ssh-keygen' -Arguments @('-t', 'ed25519', '-f', $keyPath, '-C', $BaseName, '-N', '') | Out-Null
         if ($LASTEXITCODE -ne 0) {
             return New-ActionResult -Success:$false -Status 'Error' -Message ("ssh-keygen returned exit code {0}." -f $LASTEXITCODE)
         }
@@ -397,7 +579,7 @@ function Generate-And-Register-SshKey {
 
     $addedToAgent = $false
     try {
-        & ssh-add $keyPath *> $null
+        Invoke-InstallCommand -FilePath 'ssh-add' -Arguments @($keyPath) | Out-Null
         if ($LASTEXITCODE -eq 0) {
             $addedToAgent = $true
             Write-InstallStatus -Status 'Installed' -Message 'New key added to ssh-agent.' -Indent '    '
@@ -438,8 +620,9 @@ function Install-ChocoPackage {
 
     $installed = $false
     try {
-        $result = & choco list --local-only --exact $PackageName --limit-output 2>$null | ForEach-Object { $_.Trim() }
-        if ($result -and ($result -match "^$([Regex]::Escape($PackageName))\\|")) {
+        $listOutput = Invoke-InstallCommand -FilePath 'choco' -Arguments @('list', '--local-only', '--exact', $PackageName, '--limit-output') -CaptureOutput
+        $result = $listOutput | ForEach-Object { $_.Trim() }
+        if ($result -and ($result -match "^$([Regex]::Escape($PackageName))\|")) {
             $installed = $true
         }
     } catch {
@@ -458,7 +641,7 @@ function Install-ChocoPackage {
     Write-InstallStatus -Status 'Running' -Message ("Installing {0} via Chocolatey..." -f $PackageName) -Indent '    '
 
     try {
-        & choco install $PackageName -y --no-progress *> $null
+        Invoke-InstallCommand -FilePath 'choco' -Arguments @('install', $PackageName, '-y', '--no-progress') | Out-Null
         if ($LASTEXITCODE -ne 0) {
             return [pscustomobject]@{
                 Name    = $PackageName
@@ -534,10 +717,8 @@ function Install-StoreApp {
         }
 
         try {
-            $listResult = & winget list --id $Id --exact --accept-source-agreements 2>$null
-            if ($listResult -and $listResult -match [Regex]::Escape($Id)) {
-                return $true
-            }
+            $listResult = Invoke-InstallCommand -FilePath 'winget' -Arguments @('list', '--id', $Id, '--exact', '--accept-source-agreements') -CaptureOutput
+            if ($listResult -and ($listResult | Where-Object { $_ -match [Regex]::Escape($Id) })) { return $true }
         } catch {}
 
         return $false
@@ -557,7 +738,7 @@ function Install-StoreApp {
     $installExit = $null
     $installError = $null
     try {
-        & winget install --id $id --exact --accept-package-agreements --accept-source-agreements *> $null
+        Invoke-InstallCommand -FilePath 'winget' -Arguments @('install', '--id', $id, '--exact', '--accept-package-agreements', '--accept-source-agreements') | Out-Null
         $installExit = $LASTEXITCODE
     } catch {
         $installError = $_
@@ -606,8 +787,8 @@ function Step-EnsureWsl {
     $ready = $false
     $installed = $false
     try {
-        & $wslPath --help *> $null
-        $ready = $true
+        Invoke-InstallCommand -FilePath $wslPath -Arguments @('-l', '-q') | Out-Null
+        $ready = ($LASTEXITCODE -eq 0)
     } catch {
         $ready = $false
     }
@@ -615,7 +796,7 @@ function Step-EnsureWsl {
     if (-not $ready) {
         Write-InstallStatus -Status 'Info' -Message 'WSL not initialized. Installing WSL...'
         try {
-            & $wslPath --install *> $null
+            Invoke-InstallCommand -FilePath $wslPath -Arguments @('--install') | Out-Null
             if ($LASTEXITCODE -ne 0) {
                 return New-ActionResult -Success:$false -Status 'InstallFailed' -Message ("WSL install exited with code {0}." -f $LASTEXITCODE)
             }
@@ -626,15 +807,15 @@ function Step-EnsureWsl {
 
         Start-Sleep -Seconds 5
         try {
-            & $wslPath --help *> $null
-            $ready = $true
+            Invoke-InstallCommand -FilePath $wslPath -Arguments @('-l', '-q') | Out-Null
+            $ready = ($LASTEXITCODE -eq 0)
         } catch {
             return New-ActionResult -Success:$false -Status 'Unavailable' -Message 'wsl.exe is unavailable after installation; a reboot may be required.'
         }
     }
 
     try {
-        & $wslPath --set-default-version 2 *> $null
+        Invoke-InstallCommand -FilePath $wslPath -Arguments @('--set-default-version', '2') | Out-Null
         if ($LASTEXITCODE -ne 0) {
             Write-InstallStatus -Status 'Warning' -Message ("Unable to set WSL default version to 2 (exit {0})." -f $LASTEXITCODE)
         } else {
@@ -663,21 +844,14 @@ function Step-EnsureUbuntu {
         return New-ActionResult -Success:$false -Status 'Missing' -Message 'Cannot manage WSL distributions because wsl.exe is unavailable.'
     }
 
-    $existing = @()
-    try {
-        $existing = & $wslPath --list --quiet 2>$null | Where-Object { $_ } | ForEach-Object { $_.Trim() }
-    } catch {
-        Write-InstallStatus -Status 'Warning' -Message ("Failed to enumerate WSL distributions: {0}" -f $_)
-    }
-
-    $match = $existing | Where-Object { $_ -like "$distributionName*" }
-    if ($match.Count -gt 0) {
-        return New-ActionResult -Success:$true -Status 'Skipped' -Message ("{0} distribution already present: {1}" -f $distributionName, ($match -join ', '))
+    $existingMatches = Get-WslDistributionMatches -WslPath $wslPath -DistributionName $distributionName
+    if ($existingMatches.Count -gt 0) {
+        return New-ActionResult -Success:$true -Status 'Skipped' -Message ("{0} distribution already present: {1}" -f $distributionName, ($existingMatches -join ', '))
     }
 
     Write-InstallStatus -Status 'Info' -Message ("Installing WSL distribution '{0}'..." -f $distributionName)
     try {
-        & $wslPath --install -d $distributionName *> $null
+        Invoke-InstallCommand -FilePath $wslPath -Arguments @('--install', '-d', $distributionName) | Out-Null
         if ($LASTEXITCODE -ne 0) {
             return New-ActionResult -Success:$false -Status 'InstallFailed' -Message ("WSL distribution install exited with code {0}." -f $LASTEXITCODE)
         }
@@ -686,15 +860,10 @@ function Step-EnsureUbuntu {
     }
 
     Start-Sleep -Seconds 5
-    try {
-        $existing = & $wslPath --list --quiet 2>$null | Where-Object { $_ } | ForEach-Object { $_.Trim() }
-    } catch {
-        Write-InstallStatus -Status 'Warning' -Message ("Could not confirm installation of '{0}'." -f $distributionName)
-    }
 
-    $match = $existing | Where-Object { $_ -like "$distributionName*" }
-    if ($match.Count -gt 0) {
-        return New-ActionResult -Success:$true -Status 'Installed' -Message ("WSL distribution '{0}' installed as: {1}" -f $distributionName, ($match -join ', '))
+    $postInstallMatches = Get-WslDistributionMatches -WslPath $wslPath -DistributionName $distributionName
+    if ($postInstallMatches.Count -gt 0) {
+        return New-ActionResult -Success:$true -Status 'Installed' -Message ("WSL distribution '{0}' installed as: {1}" -f $distributionName, ($postInstallMatches -join ', '))
     }
 
     return New-ActionResult -Success:$false -Status 'Pending' -Message ("WSL reports that '{0}' is not available yet. Complete any reboot prompts and try again." -f $distributionName)
@@ -719,7 +888,7 @@ function Step-EnsureChocolatey {
     }
 
     try {
-        & powershell -NoProfile -ExecutionPolicy Bypass -Command $installScript
+        Invoke-InstallCommand -FilePath 'powershell' -Arguments @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', $installScript) | Out-Null
     } catch {
         return New-ActionResult -Success:$false -Status 'InstallFailed' -Message ("Chocolatey installation failed: {0}" -f $_)
     }
@@ -750,7 +919,7 @@ function Step-EnsureGit {
 
     Write-InstallStatus -Status 'Info' -Message 'Git not found. Installing via Chocolatey...'
     try {
-        & choco install git -y --no-progress *> $null
+        Invoke-InstallCommand -FilePath 'choco' -Arguments @('install', 'git', '-y', '--no-progress') | Out-Null
         if ($LASTEXITCODE -ne 0) {
             return New-ActionResult -Success:$false -Status 'InstallFailed' -Message ("Git installation exited with code {0}." -f $LASTEXITCODE)
         }
@@ -830,6 +999,9 @@ function Step-SetChromeAsDefault {
     Write-InstallStatus -Status 'Running' -Message ("Setting Google Chrome as the default browser via {0}" -f $chromePath) -Indent '    '
 
     try {
+        if ($Script:InstallVerboseEnabled) {
+            (Format-InstallCommandLine -Executable $chromePath -Arguments @('--make-default-browser', '--no-first-run', '--no-default-browser-check')) | Write-InstallVerbose
+        }
         $process = Start-Process -FilePath $chromePath -ArgumentList '--make-default-browser','--no-first-run','--no-default-browser-check' -WindowStyle Hidden -PassThru -ErrorAction Stop
         $process.WaitForExit()
         $exitCode = $process.ExitCode
@@ -1025,7 +1197,7 @@ function Step-EnsureLocalRepository {
 
     $exitCode = 0
     try {
-        & git clone $gitUrl $repoPath
+        Invoke-InstallCommand -FilePath 'git' -Arguments @('clone', $gitUrl, $repoPath) | Out-Null
         $exitCode = $LASTEXITCODE
     } catch {
         return New-ActionResult -Success:$false -Status 'InstallFailed' -Message ("git clone failed: {0}" -f $_)
@@ -1124,6 +1296,10 @@ $profile = New-InstallProfile -ForceNewSshKey:$ForceNewSshKey -NoGit:$NoGit
 $context = New-InstallContext -Profile $profile
 
 Write-InstallStatus -Status 'Info' -Message 'Starting setup workflow.' -Indent ''
+
+if ($Script:InstallVerboseEnabled) {
+    Write-InstallStatus -Status 'Info' -Message 'Verbose command output enabled.' -Indent ''
+}
 
 foreach ($step in $profile.Steps) {
     Invoke-Step -Context $context -Step $step
