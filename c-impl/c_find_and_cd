@@ -1,12 +1,13 @@
 #!/bin/bash
 
 c_find_and_cd() {
-    local query="$1"
-    local preferred_index="$2"
+    local open_in_code="$1"
+    local query="$2"
+    local preferred_index="$3"
     local results
 
     if [[ -z "$query" ]]; then
-        echo "Usage: c <query>"
+        echo "Usage: c [-c] <query> [preferred-index]"
         return 1
     fi
 
@@ -20,5 +21,5 @@ c_find_and_cd() {
         results="$(c_filter_by_folder_text "$query")"
     fi
 
-    c_choose_and_cd "$results" "$preferred_index"
+    c_choose_and_cd "$results" "$preferred_index" "$open_in_code"
 }
