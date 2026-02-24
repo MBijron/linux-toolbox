@@ -1,0 +1,24 @@
+#!/bin/bash
+
+c_find_and_cd() {
+    local query="$1"
+    local preferred_index="$2"
+    local results
+
+    if [[ -z "$query" ]]; then
+        echo "Usage: c <query>"
+        return 1
+    fi
+
+    results="$(c_filter_by_abbreviation "$query")"
+
+    if [[ -z "$results" ]]; then
+        results="$(c_filter_by_abbreviation_text "$query")"
+    fi
+
+    if [[ -z "$results" ]]; then
+        results="$(c_filter_by_folder_text "$query")"
+    fi
+
+    c_choose_and_cd "$results" "$preferred_index"
+}

@@ -1,0 +1,28 @@
+#!/bin/bash
+
+c_build_repo_map() {
+    local roots=(
+        "/mnt/c/localrepos"
+        "/mnt/c/localrepo"
+        "/mnt/c/repos"
+        "/mnt/d/localrepos"
+        "/mnt/d/localrepo"
+        "/mnt/d/repos"
+    )
+    local root
+    local repo_path
+    local folder_name
+    local abbreviation
+
+    for root in "${roots[@]}"; do
+        [[ -d "$root" ]] || continue
+
+        while IFS= read -r -d '' repo_path; do
+            folder_name="$(basename "$repo_path")"
+            abbreviation="$(c_abbreviate "$folder_name")"
+            printf '%s\t%s\t%s\n' "$repo_path" "$folder_name" "$abbreviation"
+        done < <(find "$root" -mindepth 1 -maxdepth 1 -type d -print0 2>/dev/null)
+    done
+
+    c_build_repo_map_enrich
+}

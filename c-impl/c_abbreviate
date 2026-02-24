@@ -1,0 +1,20 @@
+#!/bin/bash
+
+c_abbreviate() {
+    local input="$1"
+
+    if [[ -z "$input" ]]; then
+        return
+    fi
+
+    printf '%s\n' "$input" \
+        | tr '-' ' ' \
+        | awk '{
+            for (i = 1; i <= NF; i++) {
+                if (length($i) > 0) {
+                    printf "%s", tolower(substr($i, 1, 1))
+                }
+            }
+            printf "\n"
+        }'
+}

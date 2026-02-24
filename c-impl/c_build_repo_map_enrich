@@ -1,0 +1,24 @@
+#!/bin/bash
+
+c_build_repo_map_enrich() {
+    local hard_coded_entries=(
+        "/toolbox, toolbox, lt"
+    )
+    local entry
+    local entry_path
+    local entry_name
+    local entry_abbreviation
+
+    for entry in "${hard_coded_entries[@]}"; do
+        IFS=',' read -r entry_path entry_name entry_abbreviation <<< "$entry"
+
+        entry_path="${entry_path#${entry_path%%[![:space:]]*}}"
+        entry_path="${entry_path%${entry_path##*[![:space:]]}}"
+        entry_name="${entry_name#${entry_name%%[![:space:]]*}}"
+        entry_name="${entry_name%${entry_name##*[![:space:]]}}"
+        entry_abbreviation="${entry_abbreviation#${entry_abbreviation%%[![:space:]]*}}"
+        entry_abbreviation="${entry_abbreviation%${entry_abbreviation##*[![:space:]]}}"
+
+        printf '%s\t%s\t%s\n' "$entry_path" "$entry_name" "$entry_abbreviation"
+    done
+}

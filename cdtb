@@ -1,5 +1,0 @@
-#!/bin/bash
-
-cdtb() {
-    cd "$(wslpath "$(toolbox-setting toolbox-location)")"
-}

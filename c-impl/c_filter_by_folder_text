@@ -1,0 +1,8 @@
+#!/bin/bash
+
+c_filter_by_folder_text() {
+    local query
+    query="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
+
+    c_build_repo_map | awk -F '\t' -v q="$query" 'index(tolower($2), q) > 0'
+}

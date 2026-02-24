@@ -1,0 +1,19 @@
+#!/bin/bash
+
+c_print_repo_map() {
+    local color_abbr=""
+    local color_name=""
+    local color_reset=""
+
+    if [[ -t 1 ]]; then
+        color_abbr=$'\033[1;36m'
+        color_name=$'\033[0;37m'
+        color_reset=$'\033[0m'
+    fi
+
+    c_build_repo_map | while IFS=$'\t' read -r repo_path folder_name abbreviation; do
+        printf '%b%s%b\t%b%s\n' \
+            "$color_abbr" "$abbreviation" "$color_reset" \
+            "$color_name" "$folder_name$color_reset"
+    done
+}
