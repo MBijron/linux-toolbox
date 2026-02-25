@@ -1,0 +1,33 @@
+#!/bin/bash
+
+code_convert_wsl_path_to_windows_path() {
+    local wsl_target="$1"
+
+    if command -v wslpath >/dev/null 2>&1; then
+        wslpath -w "$wsl_target" 2>/dev/null && return 0
+    fi
+
+    case "$wsl_target" in
+        /mnt/[A-Za-z]|/mnt/[A-Za-z]/*)
+            local drive_letter path_suffix
+            drive_letter="${wsl_target#/mnt/}"
+            drive_letter="${drive_letter%%/*}"
+            path_suffix="${wsl_target#/mnt/$drive_letter}"
+            path_suffix="${path_suffix#/}"
+
+            drive_letter="$(printf '%s' "$drive_letter" | tr '[:lower:]' '[:upper:]')"
+            path_suffix="${path_suffix//\//\\}"
+
+            if [ -n "$path_suffix" ]; then
+                printf '%s:\\%s' "$drive_letter" "$path_suffix"
+            else
+                printf '%s:\\' "$drive_letter"
+            fi
+            return 0
+            ;;
+        *)
+            printf 'Error: cannot convert WSL path "%s" to Windows path.\n' "$wsl_target" >&2
+            return 6
+            ;;
+    esac
+}

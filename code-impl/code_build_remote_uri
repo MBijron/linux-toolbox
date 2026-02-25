@@ -1,0 +1,10 @@
+#!/bin/bash
+
+code_build_remote_uri() {
+    local authority="$1"
+    local wsl_target="$2"
+    local uri_path
+
+    uri_path="$(code_uri_escape_path "$wsl_target")"
+    printf 'vscode-remote://%s%s' "$authority" "$uri_path"
+}

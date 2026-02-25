@@ -4,6 +4,7 @@ c_choose_and_cd() {
     local results="$1"
     local preferred_index="$2"
     local open_in_code="$3"
+    local open_in_vs="$4"
     local color_index=""
     local color_abbr=""
     local color_name=""
@@ -16,6 +17,9 @@ c_choose_and_cd() {
 
     if [[ "$open_in_code" != "1" ]]; then
         open_in_code="0"
+    fi
+    if [[ "$open_in_vs" != "1" ]]; then
+        open_in_vs="0"
     fi
 
     if [[ -z "$results" ]]; then
@@ -39,6 +43,8 @@ c_choose_and_cd() {
         fi
         if [[ "$open_in_code" == "1" ]]; then
             code "$chosen_path" || return 1
+        elif [[ "$open_in_vs" == "1" ]]; then
+            vs "$chosen_path" || return 1
         else
             cd "$chosen_path" || return 1
         fi
@@ -92,6 +98,8 @@ c_choose_and_cd() {
         fi
         if [[ "$open_in_code" == "1" ]]; then
             code "$chosen_path" || return 1
+        elif [[ "$open_in_vs" == "1" ]]; then
+            vs "$chosen_path" || return 1
         else
             cd "$chosen_path" || return 1
         fi
@@ -110,6 +118,8 @@ c_choose_and_cd() {
             fi
             if [[ "$open_in_code" == "1" ]]; then
                 code "$chosen_path" || return 1
+            elif [[ "$open_in_vs" == "1" ]]; then
+                vs "$chosen_path" || return 1
             else
                 cd "$chosen_path" || return 1
             fi

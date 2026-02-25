@@ -1,0 +1,49 @@
+#!/bin/bash
+
+vs_get_visual_studio_executable_path() {
+    local executable_path
+    local raw_output
+    local normalized_output
+    local specpath_status
+
+    if ! command -v specpath >/dev/null 2>&1; then
+        printf 'Error: required command "specpath" was not found in PATH. Install or expose it, then try again.\n' >&2
+        return 7
+    fi
+
+    raw_output="$(specpath VisualStudio 2>&1)"
+    specpath_status=$?
+
+    if (( specpath_status != 0 )); then
+        printf 'Error: "specpath VisualStudio" failed with exit code %d. This usually means the Visual Studio path could not be resolved.\n' "$specpath_status" >&2
+        if [[ -n "$raw_output" ]]; then
+            printf 'specpath output: %s\n' "$raw_output" >&2
+        fi
+        return 8
+    fi
+
+    normalized_output="$(printf '%s' "$raw_output" | tr -d '\r' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+    normalized_output="${normalized_output//\"/}"
+
+    if [[ -z "$normalized_output" ]]; then
+        printf 'Error: "specpath VisualStudio" returned an empty path.\n' >&2
+        return 8
+    fi
+
+    if [[ "$normalized_output" == [A-Za-z]:\\* ]]; then
+        if ! command -v wslpath >/dev/null 2>&1; then
+            printf 'Error: wslpath not found; cannot convert Visual Studio path "%s" from Windows to WSL format.\n' "$normalized_output" >&2
+            return 9
+        fi
+
+        executable_path="$(wslpath -u "$normalized_output" 2>/dev/null)"
+        if [[ -z "$executable_path" ]]; then
+            printf 'Error: failed to convert Visual Studio path "%s" to WSL format.\n' "$normalized_output" >&2
+            return 9
+        fi
+    else
+        executable_path="$normalized_output"
+    fi
+
+    printf '%s' "$executable_path"
+}

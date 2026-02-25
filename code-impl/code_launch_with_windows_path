@@ -1,0 +1,17 @@
+#!/bin/bash
+
+code_launch_with_windows_path() {
+    local executable_path="$1"
+    local windows_target="$2"
+
+    "$executable_path" "$windows_target" >/dev/null 2>&1 &
+    local launch_status=$?
+    local process_id=$!
+
+    if (( launch_status != 0 )); then
+        printf 'Error: Failed to launch "%s" with path "%s".\n' "$executable_path" "$windows_target"
+        return 3
+    fi
+
+    builtin disown "$process_id" 2>/dev/null || true
+}

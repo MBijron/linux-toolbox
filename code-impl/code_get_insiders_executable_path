@@ -1,0 +1,5 @@
+#!/bin/bash
+
+code_get_insiders_executable_path() {
+    printf '%s' '/mnt/c/Program Files/Microsoft VS Code Insiders/Code - Insiders.exe'
+}

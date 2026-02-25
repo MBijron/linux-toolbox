@@ -1,0 +1,13 @@
+#!/bin/bash
+
+code_choose_uri_flag_for_target() {
+    local original_target="$1"
+    local wsl_target="$2"
+    local uri_flag="--file-uri"
+
+    if [ -d "$wsl_target" ] || [[ "$original_target" == */ ]]; then
+        uri_flag="--folder-uri"
+    fi
+
+    printf '%s' "$uri_flag"
+}

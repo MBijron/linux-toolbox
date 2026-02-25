@@ -1,0 +1,11 @@
+#!/bin/bash
+
+code_build_remote_authority() {
+    local distro_name="$1"
+    local authority
+
+    authority="wsl+$(code_uri_escape_path "$distro_name")"
+    authority="${authority//\//}"
+
+    printf '%s' "$authority"
+}

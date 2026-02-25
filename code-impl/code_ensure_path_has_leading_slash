@@ -1,0 +1,15 @@
+#!/bin/bash
+
+code_ensure_path_has_leading_slash() {
+    local path_value="$1"
+
+    case "$path_value" in
+        /*)
+            ;;
+        *)
+            path_value="/$path_value"
+            ;;
+    esac
+
+    printf '%s' "$path_value"
+}

@@ -1,0 +1,12 @@
+#!/bin/bash
+
+code_get_wsl_distro_name() {
+    local distro_name="${WSL_DISTRO_NAME:-}"
+
+    if [ -z "$distro_name" ]; then
+        printf 'Error: WSL_DISTRO_NAME is not set. Are you running inside WSL?\n' >&2
+        return 4
+    fi
+
+    printf '%s' "$distro_name"
+}

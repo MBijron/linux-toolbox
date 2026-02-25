@@ -1,0 +1,9 @@
+#!/bin/bash
+
+code_warn_if_target_missing() {
+    local wsl_target="$1"
+
+    if [ ! -e "$wsl_target" ]; then
+        printf 'Warning: target "%s" does not exist in WSL filesystem. Passing value through.\n' "$wsl_target" >&2
+    fi
+}

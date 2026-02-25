@@ -1,0 +1,10 @@
+#!/bin/bash
+
+code_validate_executable_exists() {
+    local executable_path="$1"
+
+    if [ ! -f "$executable_path" ]; then
+        printf 'Error: "Code - Insiders.exe" not found at %s.\n' "$executable_path"
+        return 2
+    fi
+}

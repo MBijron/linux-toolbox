@@ -1,0 +1,28 @@
+#!/bin/bash
+
+code_uri_escape_path() {
+    local input_path="$1"
+    local hex_value
+    local escaped_output=""
+    local uppercase_hex
+
+    while IFS= read -r hex_value; do
+        case "$hex_value" in
+            ''|*[!0-9a-fA-F]*)
+                continue
+                ;;
+        esac
+
+        case "$hex_value" in
+            2f|2d|2e|5f|7e|3[0-9]|4[1-9a-fA-F]|5[0-9a-fA-F]|6[1-9a-fA-F]|7[0-9a-fA-F])
+                escaped_output+="$(printf "\\x$hex_value")"
+                ;;
+            *)
+                uppercase_hex="$(printf '%s' "$hex_value" | tr '[:lower:]' '[:upper:]')"
+                escaped_output+="%$uppercase_hex"
+                ;;
+        esac
+    done < <(LC_ALL=C printf '%s' "$input_path" | od -An -tx1 -v | tr -s ' ' '\n')
+
+    printf '%s' "$escaped_output"
+}

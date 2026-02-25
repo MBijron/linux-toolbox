@@ -1,0 +1,24 @@
+#!/bin/bash
+
+code_convert_target_to_wsl_path() {
+    local target="$1"
+    local wsl_target="$target"
+
+    case "$target" in
+        [A-Za-z]:\\*)
+            if command -v wslpath >/dev/null 2>&1; then
+                wsl_target="$(wslpath -u "$target" 2>/dev/null || printf '%s' "$target")"
+            else
+                printf 'Error: wslpath not found; cannot convert Windows path "%s" to WSL.\n' "$target" >&2
+                return 5
+            fi
+            ;;
+        /*)
+            ;;
+        *)
+            wsl_target="${PWD%/}/$target"
+            ;;
+    esac
+
+    printf '%s' "$wsl_target"
+}

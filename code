@@ -1,240 +1,40 @@
 #!/bin/bash
 
-_code_exe_path() {
-    printf '%s' '/mnt/c/Program Files/Microsoft VS Code Insiders/Code - Insiders.exe'
-}
-
-_code_require_exe() {
-    local exe="$1"
-    if [ ! -f "$exe" ]; then
-        printf 'Error: "Code - Insiders.exe" not found at %s.\n' "$exe"
-        return 2
-    fi
-}
-
-_code_get_distro() {
-    local distro="${WSL_DISTRO_NAME:-}"
-    if [ -z "$distro" ]; then
-        printf 'Error: WSL_DISTRO_NAME is not set. Are you running inside WSL?\n' >&2
-        return 4
-    fi
-    printf '%s' "$distro"
-}
-
-_code_target_to_wsl_path() {
-    local target="$1"
-    local wsl_target="$target"
-
-    case "$target" in
-        [A-Za-z]:\\*)
-            if command -v wslpath >/dev/null 2>&1; then
-                wsl_target="$(wslpath -u "$target" 2>/dev/null || printf '%s' "$target")"
-            else
-                printf 'Error: wslpath not found; cannot convert Windows path "%s" to WSL.\n' "$target" >&2
-                return 5
-            fi
-            ;;
-        /*)
-            ;; # already absolute WSL path
-        *)
-            # Build a logical absolute path using $PWD to preserve symlinks in the working directory.
-            wsl_target="${PWD%/}/$target"
-            ;;
-    esac
-
-    printf '%s' "$wsl_target"
-}
-
-_code_warn_if_missing_target() {
-    local wsl_target="$1"
-    if [ ! -e "$wsl_target" ]; then
-        printf 'Warning: target "%s" does not exist in WSL filesystem. Passing value through.\n' "$wsl_target" >&2
-    fi
-}
-
-_code_is_windows_mount_path() {
-    local wsl_target="$1"
-    case "$wsl_target" in
-        /mnt/*)
-            return 0
-            ;;
-        *)
-            return 1
-            ;;
-    esac
-}
-
-_code_wsl_to_windows_path() {
-    local wsl_target="$1"
-
-    if command -v wslpath >/dev/null 2>&1; then
-        wslpath -w "$wsl_target" 2>/dev/null && return 0
-    fi
-
-    case "$wsl_target" in
-        /mnt/[A-Za-z]|/mnt/[A-Za-z]/*)
-            local drive rest
-            drive="${wsl_target#/mnt/}"
-            drive="${drive%%/*}"
-            rest="${wsl_target#/mnt/$drive}"
-            rest="${rest#/}"
-
-            drive="$(printf '%s' "$drive" | tr '[:lower:]' '[:upper:]')"
-            rest="${rest//\//\\}"
-
-            if [ -n "$rest" ]; then
-                printf '%s:\\%s' "$drive" "$rest"
-            else
-                printf '%s:\\' "$drive"
-            fi
-            return 0
-            ;;
-        *)
-            printf 'Error: cannot convert WSL path "%s" to Windows path.\n' "$wsl_target" >&2
-            return 6
-            ;;
-    esac
-}
-
-# Percent-encode a string for use in a URI path, keeping '/' unescaped.
-_code_uri_escape_path() {
-    # Avoid bash-only substring operators so this works when sourced from other shells.
-    # Encode by bytes (ASCII/UTF-8) using od.
-    local s="$1" hex out="" upper
-
-    while IFS= read -r hex; do
-        case "$hex" in
-            ''|*[!0-9a-fA-F]*)
-                continue
-                ;;
-        esac
-
-        case "$hex" in
-            2f|2d|2e|5f|7e|3[0-9]|4[1-9a-fA-F]|5[0-9a-fA-F]|6[1-9a-fA-F]|7[0-9a-fA-F])
-                # Safe: / - . _ ~ 0-9 A-Z a-z
-                out+="$(printf "\\x$hex")"
-                ;;
-            *)
-                upper="$(printf '%s' "$hex" | tr '[:lower:]' '[:upper:]')"
-                out+="%$upper"
-                ;;
-        esac
-    done < <(LC_ALL=C printf '%s' "$s" | od -An -tx1 -v | tr -s ' ' '\n')
-
-    printf '%s' "$out"
-}
-
-_code_build_authority() {
-    local distro="$1"
-    # Distro names are typically safe, but escape spaces etc for the authority portion.
-    # We reuse the same escaper and just strip '/' (should never appear in distro names).
-    local authority="wsl+$(_code_uri_escape_path "$distro")"
-    authority="${authority//\//}"
-    printf '%s' "$authority"
-}
-
-_code_ensure_leading_slash() {
-    local path="$1"
-    case "$path" in
-        /*) ;;
-        *) path="/$path" ;;
-    esac
-    printf '%s' "$path"
-}
-
-_code_build_uri() {
-    local authority="$1"
-    local wsl_target="$2"
-    local uri_path
-    uri_path="$(_code_uri_escape_path "$wsl_target")"
-    printf 'vscode-remote://%s%s' "$authority" "$uri_path"
-}
-
-_code_uri_flag_for_target() {
-    local target="$1"
-    local wsl_target="$2"
-
-    local uri_flag="--file-uri"
-    if [ -d "$wsl_target" ] || [[ "$target" == */ ]]; then
-        uri_flag="--folder-uri"
-    fi
-
-    printf '%s' "$uri_flag"
-}
-
-_code_launch() {
-    local exe="$1"
-    local uri_flag="$2"
-    local uri="$3"
-
-    # Launch (quote everything to handle spaces). Run in background so shell isn't blocked.
-    "$exe" "$uri_flag" "$uri" >/dev/null 2>&1 &
-    local launch_status=$?
-    local pid=$!
-
-    if (( launch_status != 0 )); then
-        printf 'Error: Failed to launch "%s" with URI "%s".\n' "$exe" "$uri"
-        return 3
-    fi
-
-    builtin disown "$pid" 2>/dev/null || true
-}
-
-_code_launch_windows_path() {
-    local exe="$1"
-    local windows_target="$2"
-
-    "$exe" "$windows_target" >/dev/null 2>&1 &
-    local launch_status=$?
-    local pid=$!
-
-    if (( launch_status != 0 )); then
-        printf 'Error: Failed to launch "%s" with path "%s".\n' "$exe" "$windows_target"
-        return 3
-    fi
-
-    builtin disown "$pid" 2>/dev/null || true
-}
-
 code() {
-    # usage: code <path>
     local target="${1:-.}"
-    local exe
-    local distro
+    local executable_path
+    local distro_name
     local wsl_target
     local windows_target
-    local authority
-    local uri
+    local remote_authority
+    local remote_uri
     local uri_flag
 
-    # WSL view of Code - Insiders location
-    exe="$(_code_exe_path)"
-    _code_require_exe "$exe" || return $?
+    executable_path="$(code_get_insiders_executable_path)"
+    code_validate_executable_exists "$executable_path" || return $?
 
-    # Convert target into a WSL path (do NOT resolve symlinks).
-    wsl_target="$(_code_target_to_wsl_path "$target")" || return $?
-    _code_warn_if_missing_target "$wsl_target"
+    wsl_target="$(code_convert_target_to_wsl_path "$target")" || return $?
+    if [ ! -e "$wsl_target" ]; then
+        printf '%s\n' 'Using c to resolve path'
+        c "$@" -c
+        return $?
+    fi
 
-    if _code_is_windows_mount_path "$wsl_target"; then
-        windows_target="$(_code_wsl_to_windows_path "$wsl_target")" || return $?
+    if code_is_windows_mount_path "$wsl_target"; then
+        windows_target="$(code_convert_wsl_path_to_windows_path "$wsl_target")" || return $?
         printf '%s\n' "$windows_target"
-        _code_launch_windows_path "$exe" "$windows_target" || return $?
+        code_launch_with_windows_path "$executable_path" "$windows_target" || return $?
         return 0
     fi
 
-    # Open via VS Code's WSL Remote extension by passing a vscode-remote:// URI.
-    # This keeps WSL semantics (including symlinks) instead of converting to a Windows path.
-    distro="$(_code_get_distro)" || return $?
+    distro_name="$(code_get_wsl_distro_name)" || return $?
+    remote_authority="$(code_build_remote_authority "$distro_name")"
+    wsl_target="$(code_ensure_path_has_leading_slash "$wsl_target")"
+    remote_uri="$(code_build_remote_uri "$remote_authority" "$wsl_target")"
+    uri_flag="$(code_choose_uri_flag_for_target "$target" "$wsl_target")"
 
-    authority="$(_code_build_authority "$distro")"
-    wsl_target="$(_code_ensure_leading_slash "$wsl_target")"
-    uri="$(_code_build_uri "$authority" "$wsl_target")"
-    uri_flag="$(_code_uri_flag_for_target "$target" "$wsl_target")"
-
-    # Always print the URI so it's obvious what VS Code is opening.
-    printf '%s\n' "$uri"
-
-    _code_launch "$exe" "$uri_flag" "$uri" || return $?
+    printf '%s\n' "$remote_uri"
+    code_launch_with_uri "$executable_path" "$uri_flag" "$remote_uri" || return $?
 
     return 0
 }

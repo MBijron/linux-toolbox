@@ -1,0 +1,14 @@
+#!/bin/bash
+
+code_is_windows_mount_path() {
+    local wsl_target="$1"
+
+    case "$wsl_target" in
+        /mnt/*)
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}

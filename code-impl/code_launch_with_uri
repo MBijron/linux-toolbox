@@ -1,0 +1,18 @@
+#!/bin/bash
+
+code_launch_with_uri() {
+    local executable_path="$1"
+    local uri_flag="$2"
+    local uri="$3"
+
+    "$executable_path" "$uri_flag" "$uri" >/dev/null 2>&1 &
+    local launch_status=$?
+    local process_id=$!
+
+    if (( launch_status != 0 )); then
+        printf 'Error: Failed to launch "%s" with URI "%s".\n' "$executable_path" "$uri"
+        return 3
+    fi
+
+    builtin disown "$process_id" 2>/dev/null || true
+}

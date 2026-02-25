@@ -1,0 +1,10 @@
+#!/bin/bash
+
+vs_validate_executable_exists() {
+    local executable_path="$1"
+
+    if [ ! -f "$executable_path" ]; then
+        printf 'Error: Visual Studio executable not found at "%s".\n' "$executable_path" >&2
+        return 2
+    fi
+}
