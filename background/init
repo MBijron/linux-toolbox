@@ -1,0 +1,7 @@
+#!/bin/bash
+
+background_init() {
+    [[ "${TOOLBOX_SKIP_BACKGROUND_INIT:-0}" == "1" ]] && return 0
+
+    c_background_start >/dev/null 2>&1 || true
+}

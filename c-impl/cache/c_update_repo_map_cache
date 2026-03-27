@@ -1,0 +1,21 @@
+#!/bin/bash
+
+c_update_repo_map_cache() {
+    local cache_path
+    local temporary_cache_path
+
+    cache_path="$(c_cache_path)"
+    temporary_cache_path="${cache_path}.tmp.$$"
+
+    if ! c_build_repo_map > "$temporary_cache_path"; then
+        rm -f "$temporary_cache_path"
+        return 1
+    fi
+
+    if ! mv "$temporary_cache_path" "$cache_path"; then
+        rm -f "$temporary_cache_path"
+        return 1
+    fi
+
+    return 0
+}

@@ -1,0 +1,31 @@
+#!/bin/bash
+
+c_build_repo_map() {
+    local root
+    local repo_record
+    local modified_timestamp
+    local repo_details
+    local repo_path
+    local folder_name
+    local abbreviation
+
+    {
+        while IFS= read -r root; do
+            [[ -d "$root" ]] || continue
+
+            while IFS= read -r -d '' repo_record; do
+                modified_timestamp="${repo_record%%$'\t'*}"
+                repo_details="${repo_record#*$'\t'}"
+                folder_name="${repo_details%%$'\t'*}"
+                repo_path="${repo_details#*$'\t'}"
+
+                c_repo_map_entry_create "$repo_path" "$folder_name" "$modified_timestamp"
+            done < <(find "$root" -mindepth 1 -maxdepth 1 -type d -printf '%T@\t%f\t%p\0' 2>/dev/null)
+        done < <(c_list_repo_map_roots)
+
+        while IFS=$'\t' read -r repo_path folder_name abbreviation; do
+            modified_timestamp="$(stat -c '%Y' "$repo_path" 2>/dev/null || printf '0')"
+            c_repo_map_entry_create "$repo_path" "$folder_name" "$modified_timestamp" "$abbreviation"
+        done < <(c_build_repo_map_enrich)
+    } | c_repo_map_entry_sort_by_modified_time
+}

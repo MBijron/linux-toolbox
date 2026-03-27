@@ -1,0 +1,35 @@
+#!/bin/bash
+
+c_abbreviate() {
+    local input="$1"
+    local abbreviation=""
+    local char
+    local take_next_character="1"
+
+    if [[ -z "$input" ]]; then
+        return
+    fi
+
+    while [[ -n "$input" ]]; do
+        char="${input%"${input#?}"}"
+        input="${input#?}"
+
+        case "$char" in
+            [[:space:]-])
+                take_next_character="1"
+                continue
+                ;;
+        esac
+
+        if [[ "$take_next_character" == "1" ]]; then
+            if [[ -n "${ZSH_VERSION-}" ]]; then
+                abbreviation+="${(L)char}"
+            else
+                abbreviation+="${char,,}"
+            fi
+            take_next_character="0"
+        fi
+    done
+
+    printf '%s\n' "$abbreviation"
+}

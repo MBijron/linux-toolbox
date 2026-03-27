@@ -3,6 +3,7 @@
 c() {
     local open_in_code="0"
     local open_in_vs="0"
+    local update_cache="0"
     local filtered_args=()
     local arg
 
@@ -15,8 +16,21 @@ c() {
             open_in_vs="1"
             continue
         fi
+        if [[ "$arg" == "--update-cache" ]]; then
+            update_cache="1"
+            continue
+        fi
         filtered_args+=("$arg")
     done
+
+    if [[ "$update_cache" == "1" ]]; then
+        if [[ "$open_in_code" == "1" || "$open_in_vs" == "1" || "${#filtered_args[@]}" -ne 0 ]]; then
+            return 1
+        fi
+
+        c_update_repo_map_cache
+        return $?
+    fi
 
     if [[ "$open_in_code" == "1" && "$open_in_vs" == "1" ]]; then
         echo "Usage: c [-c|-v] <query> [preferred-index]"

@@ -2,3 +2,5 @@
 .core
 .env
 /bin
+*.cache
+*.pid

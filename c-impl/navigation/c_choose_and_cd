@@ -8,12 +8,14 @@ c_choose_and_cd() {
     local color_index=""
     local color_abbr=""
     local color_name=""
+    local color_archive_name=""
     local color_path=""
     local color_reset=""
     local count
     local chosen_path
     local selection
     local clean_results
+    local active_name_color
 
     if [[ "$open_in_code" != "1" ]]; then
         open_in_code="0"
@@ -55,6 +57,7 @@ c_choose_and_cd() {
         color_index=$'\033[1;33m'
         color_abbr=$'\033[1;36m'
         color_name=$'\033[0;37m'
+        color_archive_name=$'\033[0;90m'
         color_path=$'\033[0;90m'
         color_reset=$'\033[0m'
     fi
@@ -81,11 +84,16 @@ c_choose_and_cd() {
             tab_after_name+=$'\t'
         fi
 
+        active_name_color="$color_name"
+        if [[ "$item_name" == "archive" && "$item_abbr" == "_" ]]; then
+            active_name_color="$color_archive_name"
+        fi
+
         printf '%b%d)%b\t%b%s%b%s%b%s%b%s%b%s%b\n' \
             "$color_index" "$((index + 1))" "$color_reset" \
             "$color_abbr" "$item_abbr" "$color_reset" \
             "$tab_after_abbr" \
-            "$color_name" "$item_name" "$color_reset" \
+            "$active_name_color" "$item_name" "$color_reset" \
             "$tab_after_name" \
             "$color_path" "$item_path" "$color_reset"
     done

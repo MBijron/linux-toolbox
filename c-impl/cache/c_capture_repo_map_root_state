@@ -1,0 +1,13 @@
+#!/bin/bash
+
+c_capture_repo_map_root_state() {
+    local root
+    local modified_timestamp
+
+    while IFS= read -r root; do
+        [[ -d "$root" ]] || continue
+
+        modified_timestamp="$(stat -c '%Y' "$root" 2>/dev/null || printf '0')"
+        printf '%s\t%s\n' "$root" "$modified_timestamp"
+    done < <(c_list_repo_map_roots)
+}

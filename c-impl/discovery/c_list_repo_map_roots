@@ -1,0 +1,13 @@
+#!/bin/bash
+
+c_list_repo_map_roots() {
+    local -a root_templates=(
+        "/mnt/c/localrepos"
+        "/mnt/c/localrepo"
+        "/mnt/c/repos"
+        "/mnt/c/Visual Studio/Projects"
+        "/mnt/c/Repositories"
+    )
+
+    c_expand_repo_map_roots "${root_templates[@]}"
+}

@@ -1,0 +1,24 @@
+#!/bin/bash
+
+c_list_local_mnt_mounts() {
+    local mount_path
+    local mount_name
+
+    [[ -d "/mnt" ]] || return 0
+
+    while IFS= read -r -d '' mount_path; do
+        mount_name="${mount_path##*/}"
+
+        case "$mount_name" in
+            wsl|wslg)
+                continue
+                ;;
+        esac
+
+        if c_is_network_mount "$mount_path"; then
+            continue
+        fi
+
+        printf '%s\n' "$mount_path"
+    done < <(find "/mnt" -mindepth 1 -maxdepth 1 -type d -print0 2>/dev/null)
+}

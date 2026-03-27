@@ -1,27 +1,42 @@
 #!/bin/bash
 
 tbr() {
-  # First, load all files in $TBDIR/core
-  if [ -d "$TBDIR/core" ]; then
+  local file
+  local filename
+
+  tbr_source_non_hidden_files_recursive() {
+    local search_root="$1"
+
+    [[ -d "$search_root" ]] || return 0
+
     while IFS= read -r -d '' file; do
       filename="${file##*/}"
-      if [ -f "$file" ] && [[ "$filename" != *.* ]] && [[ "$filename" != .* ]]; then
-        source "$file"
-      fi
-    done < <(find "$TBDIR/core" -type f -print0)
-  fi
 
-  # Loop through each file in the directory
+      if [[ ! -f "$file" ]] || [[ "$filename" == *.* ]] || [[ "$filename" == .* ]]; then
+        continue
+      fi
+
+      source "$file"
+    done < <(find "$search_root" -type f -print0 | sort -z)
+  }
+
+  tbr_source_non_hidden_files_recursive "$TBDIR/core"
+
   while IFS= read -r -d '' file; do
-    # Extract the basename
     filename="${file##*/}"
 
-    if [ ! -f "$file" ] || [[ "$filename" == *.* ]] || [[ "$filename" == .* ]]; then
+    if [[ ! -f "$file" ]] || [[ "$filename" == *.* ]] || [[ "$filename" == .* ]]; then
       continue
     fi
 
     source "$file"
-  done < <(find "$TBDIR" \
-    \( -type d \( -name "bin" -o -name "core" -o -name ".*" \) -prune \) -o \
-    \( -type f ! -name ".*" -print0 \))
+  done < <(
+    find "$TBDIR" \
+      \( -type d \( -name "bin" -o -name "core" -o -name ".*" \) -prune \) -o \
+      \( -type f ! -name ".*" -print0 \) | sort -z
+  )
+
+  if [[ $- == *i* ]] && [[ "${TOOLBOX_SKIP_BACKGROUND_INIT:-0}" != "1" ]] && typeset -f background_init >/dev/null 2>&1; then
+    background_init
+  fi
 }

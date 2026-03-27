@@ -8,4 +8,9 @@
 - Prefer small, simple functions that are easy to read and understand.
 - Do not create overly-small functions just to split code; each function should represent a clear, logical unit of behavior.
 - You may create subfolders in a `<command>-impl` folder when grouping improves clarity.
+- Keep a concise `readme.md` in each `*-impl` folder as a cheat sheet for the layer structure and key files.
+- When working in a `*-impl` folder, quickly read that folder's `readme.md` first to understand the implementation layout.
+- When changing the structure or responsibilities in a `*-impl` folder, keep its `readme.md` up to date.
 - Do not add manual `source` steps for these files; loading is handled automatically by rtb/tbr during Linux startup.
+- After completing work, always ask for user feedback using the `vscode_askQuestions` tool before ending the conversation.
+- Only end the conversation after that feedback request has been sent successfully.

@@ -1,0 +1,22 @@
+#!/bin/bash
+
+c_expand_repo_map_roots() {
+    local root
+    local mount_path
+    local -a mount_paths=()
+
+    while IFS= read -r mount_path; do
+        mount_paths+=("$mount_path")
+    done < <(c_list_local_mnt_mounts)
+
+    for root in "$@"; do
+        if [[ "$root" == /mnt/c/* ]]; then
+            for mount_path in "${mount_paths[@]}"; do
+                printf '%s\n' "${root/#\/mnt\/c/$mount_path}"
+            done
+            continue
+        fi
+
+        printf '%s\n' "$root"
+    done
+}

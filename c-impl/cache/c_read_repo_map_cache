@@ -1,0 +1,10 @@
+#!/bin/bash
+
+c_read_repo_map_cache() {
+    local cache_path
+
+    cache_path="$(c_cache_path)"
+    [[ -f "$cache_path" ]] || return 0
+
+    cat "$cache_path"
+}

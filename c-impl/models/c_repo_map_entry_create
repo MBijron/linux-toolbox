@@ -1,0 +1,40 @@
+#!/bin/bash
+
+c_repo_map_entry_create() {
+    local repo_path="$1"
+    local raw_name="$2"
+    local modified_timestamp="$3"
+    local abbreviation_override="$4"
+    local display_name="$raw_name"
+    local abbreviation=""
+
+    if [[ -z "$repo_path" ]]; then
+        return 1
+    fi
+
+    if [[ -z "$raw_name" ]]; then
+        raw_name="${repo_path##*/}"
+        display_name="$raw_name"
+    fi
+
+    case "$raw_name" in
+        _[Aa][Rr][Cc][Hh][Ii][Vv][Ee])
+            display_name="archive"
+            abbreviation="_"
+            ;;
+        *)
+            if [[ -n "$abbreviation_override" ]]; then
+                abbreviation="$abbreviation_override"
+            else
+                abbreviation="$(c_abbreviate "$display_name")"
+            fi
+            ;;
+    esac
+
+    if [[ -n "$modified_timestamp" ]]; then
+        printf '%s\t%s\t%s\t%s\n' "$modified_timestamp" "$repo_path" "$display_name" "$abbreviation"
+        return 0
+    fi
+
+    printf '%s\t%s\t%s\n' "$repo_path" "$display_name" "$abbreviation"
+}

@@ -1,0 +1,8 @@
+#!/bin/bash
+
+c_repo_map_entry_sort_by_modified_time() {
+    awk -F '\t' 'BEGIN { OFS = FS } {
+        archive_sort_key = (($3 == "archive") && ($4 == "_")) ? 1 : 0
+        print archive_sort_key, $0
+    }' | sort -t $'\t' -k1,1n -k2,2nr | cut -f3-
+}

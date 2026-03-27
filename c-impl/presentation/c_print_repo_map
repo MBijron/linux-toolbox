@@ -1,0 +1,28 @@
+#!/bin/bash
+
+c_print_repo_map() {
+    local color_abbr=""
+    local color_name=""
+    local color_archive_name=""
+    local color_reset=""
+    local active_name_color
+
+    if [[ -t 1 ]]; then
+        color_abbr=$'\033[1;36m'
+        color_name=$'\033[0;37m'
+        color_archive_name=$'\033[0;90m'
+        color_reset=$'\033[0m'
+    fi
+
+    c_read_repo_map_cache | while IFS=$'\t' read -r repo_path folder_name abbreviation; do
+        active_name_color="$color_name"
+
+        if [[ "$folder_name" == "archive" && "$abbreviation" == "_" ]]; then
+            active_name_color="$color_archive_name"
+        fi
+
+        printf '%b%s%b\t%b%s\n' \
+            "$color_abbr" "$abbreviation" "$color_reset" \
+            "$active_name_color" "$folder_name$color_reset"
+    done
+}

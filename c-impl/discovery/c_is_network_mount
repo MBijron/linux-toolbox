@@ -1,0 +1,41 @@
+#!/bin/bash
+
+c_is_network_mount() {
+    local mount_path="$1"
+    local mount_source=""
+    local mount_fstype=""
+    local mount_options=""
+    local current_path=""
+
+    [[ -n "$mount_path" ]] || return 1
+
+    while read -r mount_source current_path mount_fstype mount_options _; do
+        [[ "$current_path" == "$mount_path" ]] || continue
+        break
+    done < /proc/mounts
+
+    [[ "$current_path" == "$mount_path" ]] || return 1
+
+    case "$mount_fstype" in
+        cifs|nfs|nfs4|smb3|sshfs|fuse.sshfs|afpfs|davfs|davfs2)
+            return 0
+            ;;
+    esac
+
+    case "$mount_source" in
+        //*)
+            return 0
+            ;;
+        \\\\*)
+            return 0
+            ;;
+    esac
+
+    case ",$mount_options," in
+        *,unc=*,|*,remote,*)
+            return 0
+            ;;
+    esac
+
+    return 1
+}

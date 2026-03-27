@@ -1,0 +1,5 @@
+#!/bin/bash
+
+c_cache_path() {
+    printf '%s/c.cache\n' "${TBDIR:-/toolbox}"
+}
