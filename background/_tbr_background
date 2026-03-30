@@ -1,0 +1,120 @@
+#!/bin/bash
+
+tbr_background_pid_path() {
+    printf '%s/.tbr_background.pid\n' "${TBDIR:-/toolbox}"
+}
+
+tbr_background_is_running() {
+    local pid_path
+    local background_pid
+
+    pid_path="$(tbr_background_pid_path)"
+    [[ -f "$pid_path" ]] || return 1
+
+    if ! read -r background_pid < "$pid_path"; then
+        rm -f "$pid_path"
+        return 1
+    fi
+
+    if [[ ! "$background_pid" =~ ^[0-9]+$ ]]; then
+        rm -f "$pid_path"
+        return 1
+    fi
+
+    if kill -0 "$background_pid" 2>/dev/null; then
+        return 0
+    fi
+
+    rm -f "$pid_path"
+    return 1
+}
+
+tbr_background_print_cache_failure() {
+    local output_target="$1"
+    local red=$'\033[0;31m'
+    local reset=$'\033[0m'
+    local message="tbr cache update failed"
+
+    if [[ -n "$output_target" && -e "$output_target" ]]; then
+        printf '%b%s%b\n' "$red" "$message" "$reset" > "$output_target" 2>/dev/null || true
+        return 0
+    fi
+
+    printf '%b%s%b\n' "$red" "$message" "$reset" >&2
+}
+
+tbr_background_run_service() {
+    local output_target="$1"
+    local poll_interval_seconds="${TBR_BACKGROUND_POLL_INTERVAL:-60}"
+    local cache_path
+    local ttl
+    local previous_signature=""
+    local current_signature
+    local previous_git_head=""
+    local current_git_head=""
+
+    cache_path="$(_tbr_cache_path)"
+    ttl="$(_tbr_cache_ttl)"
+
+    while true; do
+        if ! current_signature="$(_tbr_cache_signature)"; then
+            tbr_background_print_cache_failure "$output_target"
+            sleep "$poll_interval_seconds" || return 0
+            continue
+        fi
+
+        current_git_head=""
+        if [[ "${TBR_CACHE_GIT_CHECK:-0}" == "1" ]]; then
+            current_git_head="$(_tbr_git_head)"
+        fi
+
+        if ! _tbr_cache_valid "$cache_path" "$ttl" "$current_signature" "$current_git_head" \
+            || [[ "$current_signature" != "$previous_signature" ]] \
+            || [[ "$current_git_head" != "$previous_git_head" ]]; then
+            if ! _tbr_write_cache "$cache_path" "$ttl" "$current_signature" "$current_git_head"; then
+                tbr_background_print_cache_failure "$output_target"
+                sleep "$poll_interval_seconds" || return 0
+                continue
+            fi
+        fi
+
+        previous_signature="$current_signature"
+        previous_git_head="$current_git_head"
+
+        sleep "$poll_interval_seconds" || return 0
+    done
+}
+
+tbr_background_start() {
+    local pid_path
+    local shell_path
+    local output_target=""
+    local background_pid
+
+    if tbr_background_is_running; then
+        return 0
+    fi
+
+    pid_path="$(tbr_background_pid_path)"
+    shell_path="$(command -v bash)"
+    [[ -n "$shell_path" ]] || return 1
+
+    if [[ -t 2 ]]; then
+        output_target="/proc/$$/fd/2"
+    fi
+
+    TOOLBOX_SKIP_BACKGROUND_INIT=1 \
+    TOOLBOX_BACKGROUND_OUTPUT_TARGET="$output_target" \
+    TBDIR="${TBDIR:-/toolbox}" \
+    nohup "$shell_path" -lc 'source "$TBDIR/.core" >/dev/null 2>&1 || exit 1; tbr_background_run_service "$TOOLBOX_BACKGROUND_OUTPUT_TARGET"' \
+        >/dev/null 2>&1 &
+    background_pid=$!
+
+    if [[ ! "$background_pid" =~ ^[0-9]+$ ]]; then
+        return 1
+    fi
+
+    printf '%s\n' "$background_pid" > "$pid_path"
+    disown "$background_pid" 2>/dev/null || true
+    return 0
+}

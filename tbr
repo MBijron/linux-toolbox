@@ -1,40 +1,292 @@
 #!/bin/bash
 
-tbr() {
+_tbr_source_file_fast() {
+  local file="$1"
+
+  source "$file"
+}
+
+_tbr_is_sourceable_file() {
+  local file="$1"
+  local filename="${file##*/}"
+
+  [ -f "$file" ] || return 1
+  [[ "$filename" == *.* ]] && return 1
+  [[ "$filename" == .* ]] && return 1
+  [[ "$file" == "$TBDIR/tbr" ]] && return 1
+  _tbr_is_live_source_file "$file" && return 1
+  return 0
+}
+
+_tbr_is_live_source_file() {
+  local file="$1"
+
+  case "$file" in
+    "$TBDIR/xgit") return 0 ;;
+  esac
+
+  return 1
+}
+
+_tbr_iter_core_files() {
   local file
-  local filename
 
-  tbr_source_non_hidden_files_recursive() {
-    local search_root="$1"
-
-    [[ -d "$search_root" ]] || return 0
-
-    while IFS= read -r -d '' file; do
-      filename="${file##*/}"
-
-      if [[ ! -f "$file" ]] || [[ "$filename" == *.* ]] || [[ "$filename" == .* ]]; then
-        continue
-      fi
-
-      source "$file"
-    done < <(find "$search_root" -type f -print0 | sort -z)
-  }
-
-  tbr_source_non_hidden_files_recursive "$TBDIR/core"
+  [[ -d "$TBDIR/core" ]] || return 0
 
   while IFS= read -r -d '' file; do
-    filename="${file##*/}"
-
-    if [[ ! -f "$file" ]] || [[ "$filename" == *.* ]] || [[ "$filename" == .* ]]; then
-      continue
+    if _tbr_is_sourceable_file "$file"; then
+      printf '%s\0' "$file"
     fi
+  done < <(find "$TBDIR/core" -type f -print0 | sort -z)
+}
 
-    source "$file"
+_tbr_iter_root_files() {
+  local file
+
+  while IFS= read -r -d '' file; do
+    if _tbr_is_sourceable_file "$file"; then
+      printf '%s\0' "$file"
+    fi
   done < <(
     find "$TBDIR" \
       \( -type d \( -name "bin" -o -name "core" -o -name ".*" \) -prune \) -o \
-      \( -type f ! -name ".*" -print0 \) | sort -z
+      \( -type f -print0 \) | sort -z
   )
+}
+
+_tbr_source_files() {
+  local file
+
+  while IFS= read -r -d '' file; do
+    _tbr_source_file_fast "$file"
+  done < <(_tbr_iter_core_files)
+
+  while IFS= read -r -d '' file; do
+    _tbr_source_file_fast "$file"
+  done < <(_tbr_iter_root_files)
+}
+
+_tbr_source_live_files() {
+  local file
+
+  for file in "$TBDIR/xgit"; do
+    if [ -f "$file" ]; then
+      _tbr_source_file_fast "$file"
+    fi
+  done
+}
+
+_tbr_cache_ttl() {
+  echo "${TBR_CACHE_TTL:-604800}"
+}
+
+_tbr_cache_path() {
+  local path
+
+  if [ -n "$TBR_CACHE_PATH" ]; then
+    path="$TBR_CACHE_PATH"
+  elif [ -n "$XDG_CACHE_HOME" ]; then
+    path="$XDG_CACHE_HOME/tbr.cache"
+  else
+    path="$TBDIR/.tbr.cache"
+  fi
+
+  if [[ "$path" != *.cache ]]; then
+    path="${path}.cache"
+  fi
+
+  echo "$path"
+}
+
+_tbr_ensure_cache_dir() {
+  local cache_path="$1"
+  local cache_dir
+
+  cache_dir="${cache_path%/*}"
+  if [ -n "$cache_dir" ]; then
+    mkdir -p "$cache_dir"
+  fi
+}
+
+_tbr_mtime() {
+  stat -c %Y "$1" 2>/dev/null || echo 0
+}
+
+_tbr_cache_signature() {
+  local max=0
+  local file
+  local ts
+
+  while IFS= read -r -d '' file; do
+    ts=$(_tbr_mtime "$file")
+    if [ "$ts" -gt "$max" ]; then
+      max="$ts"
+    fi
+  done < <(_tbr_iter_core_files)
+
+  while IFS= read -r -d '' file; do
+    ts=$(_tbr_mtime "$file")
+    if [ "$ts" -gt "$max" ]; then
+      max="$ts"
+    fi
+  done < <(_tbr_iter_root_files)
+
+  echo "$max"
+}
+
+_tbr_git_head() {
+  command -v git >/dev/null 2>&1 || return 0
+  git -C "$TBDIR" rev-parse HEAD 2>/dev/null
+}
+
+_tbr_read_cache_header() {
+  local cache_path="$1"
+  local line
+
+  TBR_CACHE_HEADER_TIMESTAMP=""
+  TBR_CACHE_HEADER_SIGNATURE=""
+  TBR_CACHE_HEADER_TTL=""
+  TBR_CACHE_HEADER_GIT_HEAD=""
+
+  while IFS= read -r line; do
+    [ -z "$line" ] && break
+    case "$line" in
+      timestamp=*) TBR_CACHE_HEADER_TIMESTAMP="${line#timestamp=}" ;;
+      signature=*) TBR_CACHE_HEADER_SIGNATURE="${line#signature=}" ;;
+      ttl=*) TBR_CACHE_HEADER_TTL="${line#ttl=}" ;;
+      git_head=*) TBR_CACHE_HEADER_GIT_HEAD="${line#git_head=}" ;;
+    esac
+  done < "$cache_path"
+}
+
+_tbr_cache_valid() {
+  local cache_path="$1"
+  local ttl="$2"
+  local signature="$3"
+  local git_head="$4"
+  local now
+
+  [ -f "$cache_path" ] || return 1
+
+  _tbr_read_cache_header "$cache_path"
+  [ -n "$TBR_CACHE_HEADER_TIMESTAMP" ] || return 1
+
+  if [ "$ttl" -gt 0 ] 2>/dev/null; then
+    now=$(date +%s)
+    if [ $(( now - TBR_CACHE_HEADER_TIMESTAMP )) -gt "$ttl" ]; then
+      return 1
+    fi
+  fi
+
+  [ "$TBR_CACHE_HEADER_SIGNATURE" = "$signature" ] || return 1
+
+  if [ -n "$git_head" ]; then
+    [ "$TBR_CACHE_HEADER_GIT_HEAD" = "$git_head" ] || return 1
+  fi
+
+  return 0
+}
+
+_tbr_append_file_to_cache() {
+  local cache_path="$1"
+  local file="$2"
+
+  cat "$file" >> "$cache_path"
+  printf '\n' >> "$cache_path"
+}
+
+_tbr_write_cache() {
+  local cache_path="$1"
+  local ttl="$2"
+  local signature="$3"
+  local git_head="$4"
+  local file
+  local tmp
+
+  _tbr_ensure_cache_dir "$cache_path"
+  tmp="$(mktemp "${cache_path}.XXXXXX")" || return 1
+
+  {
+    echo "timestamp=$(date +%s)"
+    echo "signature=$signature"
+    echo "ttl=$ttl"
+    if [ -n "$git_head" ]; then
+      echo "git_head=$git_head"
+    fi
+    echo ""
+  } > "$tmp"
+
+  while IFS= read -r -d '' file; do
+    _tbr_append_file_to_cache "$tmp" "$file"
+  done < <(_tbr_iter_core_files)
+
+  while IFS= read -r -d '' file; do
+    _tbr_append_file_to_cache "$tmp" "$file"
+  done < <(_tbr_iter_root_files)
+
+  mv "$tmp" "$cache_path"
+}
+
+_tbr_refresh_cache() {
+  local force_refresh="$1"
+  local cache_path
+  local ttl
+  local signature
+  local git_head=""
+
+  cache_path="$(_tbr_cache_path)"
+  ttl="$(_tbr_cache_ttl)"
+  signature="$(_tbr_cache_signature)"
+
+  if [ "${TBR_CACHE_GIT_CHECK:-0}" = "1" ]; then
+    git_head="$(_tbr_git_head)"
+  fi
+
+  if [ "$force_refresh" != "1" ] && _tbr_cache_valid "$cache_path" "$ttl" "$signature" "$git_head"; then
+    return 0
+  fi
+
+  _tbr_write_cache "$cache_path" "$ttl" "$signature" "$git_head"
+}
+
+_tbr_should_force_rebuild() {
+  local arg
+
+  for arg in "$@"; do
+    case "$arg" in
+      -f|--force) return 0 ;;
+    esac
+  done
+
+  return 1
+}
+
+tbr() {
+  local cache_path
+  local force_refresh="0"
+
+  cache_path="$(_tbr_cache_path)"
+
+  if _tbr_should_force_rebuild "$@"; then
+    force_refresh="1"
+  fi
+
+  if [ "$force_refresh" = "1" ]; then
+    _tbr_refresh_cache "1"
+  fi
+
+  if [ -f "$cache_path" ]; then
+    _tbr_source_file_fast "$cache_path"
+  else
+    _tbr_refresh_cache "1" >/dev/null 2>&1 || true
+    if [ -f "$cache_path" ]; then
+      _tbr_source_file_fast "$cache_path"
+    else
+      _tbr_source_files
+    fi
+  fi
+
+  _tbr_source_live_files
 
   if [[ $- == *i* ]] && [[ "${TOOLBOX_SKIP_BACKGROUND_INIT:-0}" != "1" ]] && typeset -f background_init >/dev/null 2>&1; then
     background_init

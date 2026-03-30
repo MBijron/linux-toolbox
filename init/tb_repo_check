@@ -1,0 +1,68 @@
+#!/bin/bash
+
+TBDIR="${TBDIR:-/toolbox}"
+TOOLBOX_REPO_OUTPUT_TARGET="${TOOLBOX_REPO_OUTPUT_TARGET:-}"
+TB_GIT_CMD="${TB_GIT_CMD:-git.exe}"
+
+tb_repo_emit() {
+  local message="$1"
+
+  if [[ -n "$TOOLBOX_REPO_OUTPUT_TARGET" && -e "$TOOLBOX_REPO_OUTPUT_TARGET" ]]; then
+    printf '%s\n' "$message" > "$TOOLBOX_REPO_OUTPUT_TARGET" 2>/dev/null || true
+    return 0
+  fi
+
+  printf '%s\n' "$message" >&2
+}
+
+tb_repo_apply_permissions() {
+  local file
+  local filename
+
+  find "$TBDIR" \
+    -type d \( -name "bin" -o -name ".*" \) -prune -o \
+    -type f -print | while IFS= read -r file; do
+    filename="${file##*/}"
+
+    if [ ! -f "$file" ] || [[ "$filename" == *.* ]] || [[ "$filename" == .* ]]; then
+      continue
+    fi
+
+    chmod +x "$file"
+  done
+}
+
+main() {
+  local lock_path="$TBDIR/.repo-check.lock"
+
+  if [ -d "$TBDIR/.git" ]; then
+    return 0
+  fi
+
+  if ! mkdir "$lock_path" 2>/dev/null; then
+    return 0
+  fi
+
+  trap 'rmdir "$lock_path" 2>/dev/null || true' EXIT
+
+  if [ -d "$TBDIR/.git" ]; then
+    return 0
+  fi
+
+  if [ -d "$TBDIR" ]; then
+    tb_repo_emit "[tb repo] Repairing toolbox repository in background..."
+    "$TB_GIT_CMD" -C "$TBDIR" init || return 1
+    "$TB_GIT_CMD" config --global --add safe.directory "%(prefix)/$(wslpath -m "$TBDIR")"
+    "$TB_GIT_CMD" -C "$TBDIR" remote add origin git@github.com:MBijron/linux-toolbox.git 2>/dev/null || true
+    "$TB_GIT_CMD" -C "$TBDIR" fetch || return 1
+    "$TB_GIT_CMD" -C "$TBDIR" checkout -t origin/main || "$TB_GIT_CMD" -C "$TBDIR" checkout -t origin/master || return 1
+  else
+    tb_repo_emit "[tb repo] Cloning toolbox repository in background..."
+    "$TB_GIT_CMD" clone git@github.com:MBijron/linux-toolbox.git "$TBDIR" || return 1
+  fi
+
+  tb_repo_emit "[tb repo] Applying toolbox script permissions..."
+  tb_repo_apply_permissions
+}
+
+main "$@"
