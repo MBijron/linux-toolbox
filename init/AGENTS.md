@@ -10,6 +10,7 @@ The current source of truth is:
 
 - `/toolbox/init/.tbirc`
 - `/toolbox/init/.zshrc`
+- `/toolbox/init/tb_refresh_omz_cache`
 - `/toolbox/init/tb_repo_check`
 - `/toolbox/init/tb_zcompile_cache`
 
@@ -28,7 +29,7 @@ Normal fast path:
 3. If present, it sources `/toolbox/init/.zshrc` immediately.
 4. `/toolbox/init/.zshrc` sources `/toolbox/init/.tbirc`.
 5. `/toolbox/init/.tbirc` sources `/toolbox/.env`, schedules repo maintenance in the background, sources `/toolbox/tbr`, runs `tbr`, then runs `toolbox_initialize` if defined.
-6. `/toolbox/init/.zshrc` sources `/home/maurice/.tbrc`, loads a lite Oh My Zsh path, loads `zi`, schedules remaining plugins, and sources Fig post hook.
+6. `/toolbox/init/.zshrc` sources `/home/maurice/.tbrc`, prepares the OMZ cache, loads a lite Oh My Zsh path, loads `zi`, schedules remaining plugins, sets a one-time boot-time prompt prefix, and sources Fig post hook.
 
 Bootstrap repair path:
 
@@ -49,13 +50,13 @@ Important constraint:
 - Plugin folders were not relocated
 - Home installer assumptions were preserved as much as possible
 
-### 2. Toolbox repo maintenance is async on the normal path
+### 2. Toolbox repo maintenance is async only when bootstrap metadata is missing
 
 Implemented in `/toolbox/init/.tbirc` and `/toolbox/init/tb_repo_check`.
 
 Behavior:
 
-- Every shell schedules a background repo check
+- Shell startup skips the repo-check worker when `/toolbox/.git` already exists
 - Startup does not block on repo clone/repair
 - Messages are only printed if repo repair or clone is actually needed
 
@@ -162,6 +163,50 @@ Current state:
 - `fast-syntax-highlighting`, `zsh-completions`, and `agkozak/zsh-z` stay on the deferred path
 - Do not reintroduce direct eager sourcing of `~/.zi/plugins/zsh-users---zsh-autosuggestions/...`
 
+### 8. Background zcompile is selective and covers writable startup files
+
+Implemented in `/toolbox/init/.zshrc` and `/toolbox/init/tb_zcompile_cache`.
+
+Behavior:
+
+- The background zcompile worker only starts when at least one tracked file is missing a fresh `.zwc`
+- Tracked files include the writable home bootstrap files, toolbox init files, `tbr`, `.tbr.cache`, and `zi.zsh`
+- This keeps compile caches warm without paying the worker-spawn cost on every shell
+
+### 9. Root-owned OMZ files are cache-first with background refresh
+
+Implemented in `/toolbox/init/.zshrc` and `/toolbox/init/tb_refresh_omz_cache`.
+
+Behavior:
+
+- Startup checks a manifest in `${XDG_CACHE_HOME:-$HOME/.cache}/toolbox/zsh-init`
+- If the manifest matches current OMZ source mtimes and sizes, startup sources the cached copies
+- If the manifest is missing or stale, startup sources the original OMZ files for that shell and schedules a background refresh job
+- The refresh worker writes a full new bundle and swaps the manifest only after the bundle is complete
+
+If this breaks:
+
+- Check `${XDG_CACHE_HOME:-$HOME/.cache}/toolbox/zsh-init/manifest`
+- Check `${XDG_CACHE_HOME:-$HOME/.cache}/toolbox/zsh-init/bundles`
+- Check `${XDG_CACHE_HOME:-$HOME/.cache}/toolbox/zsh-init/refresh.lock`
+- Delete the cache directory and open a new shell to force a clean rebuild
+
+### 10. Routine startup logs go to `~/startup.log`
+
+Implemented in `/toolbox/init/.tbirc` and `/toolbox/init/.zshrc`.
+
+Behavior:
+
+- Routine `[tb init ...]` lines append to `~/startup.log`
+- Warnings and important one-off notices still print to the terminal and are also appended to the log file
+- The first prompt shows `[boottime: ...ms]` once, then later prompts revert to the normal prompt
+
+If this breaks:
+
+- Check `~/startup.log`
+- Check `__tb_set_prompt_with_boot_time` in `/toolbox/init/.zshrc`
+- Check `__tb_log`, `__tb_log_notice`, and `__tb_log_warning` in `/toolbox/init/.tbirc`
+
 ## Files Intentionally Left In Home
 
 These were intentionally not moved into `/toolbox` logic or not removed entirely:
@@ -177,10 +222,10 @@ Performance was improved, but not to the user’s `< 200ms` target.
 
 Known reasons:
 
-- Startup logging is still always enabled
+- Startup logging is still always recorded to `~/startup.log`
 - Fig is still enabled
 - `zi` still loads and schedules plugins
-- Even the lite OMZ path plus logging still costs nontrivial time
+- Even the lite OMZ path plus logging still costs nontrivial time when the OMZ cache is cold or missing
 
 The user explicitly asked to keep:
 
@@ -195,7 +240,7 @@ That limits how far startup can be reduced without changing product requirements
 - Do not add installer requirements outside home dotfiles and `/toolbox`
 - Do not remove sourcing of `/home/maurice/.tbrc`
 - Do not reintroduce full `source $ZSH/oh-my-zsh.sh` unless the user explicitly accepts the startup cost
-- Do not source `.zwc` files directly by path; generate them in the background if useful, but source the original file path
+- Do not source `.zwc` files directly by path; use normal source paths or the OMZ cache indirection instead
 
 ## Fast Recovery Checklist
 
@@ -213,6 +258,13 @@ If history breaks, inspect:
 
 1. `/toolbox/init/.zshrc`
 2. `$ZSH/lib/history.zsh`
+3. `${XDG_CACHE_HOME:-$HOME/.cache}/toolbox/zsh-init/manifest`
+
+If prompt boot time or startup logging breaks, inspect:
+
+1. `/toolbox/init/.tbirc`
+2. `/toolbox/init/.zshrc`
+3. `~/startup.log`
 
 If completions break, inspect:
 

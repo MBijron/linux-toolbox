@@ -1,0 +1,64 @@
+#!/usr/bin/env zsh
+
+setopt no_nomatch
+
+cache_dir="${TB_STARTUP_CACHE_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/toolbox/zsh-init}"
+lock_dir="${TB_STARTUP_CACHE_LOCK_DIR:-$cache_dir/refresh.lock}"
+bundles_dir="$cache_dir/bundles"
+bundle_id="bundle-${EPOCHSECONDS}-${RANDOM}-$$"
+stage_dir="$bundles_dir/.tmp-${bundle_id}"
+manifest_path="$cache_dir/manifest"
+manifest_tmp="$cache_dir/manifest.tmp.$$"
+manifest_ready="$cache_dir/manifest.ready.$$"
+old_bundle=""
+
+cleanup() {
+  rm -f "$manifest_tmp" "$manifest_ready"
+  rm -rf "$stage_dir"
+  rmdir "$lock_dir" >/dev/null 2>&1 || true
+}
+
+trap cleanup EXIT INT TERM
+
+mkdir -p "$bundles_dir" || exit 1
+
+if [[ -f "$manifest_path" ]]; then
+  while IFS= read -r line; do
+    case "$line" in
+      bundle=*)
+        old_bundle="${line#bundle=}"
+        break
+        ;;
+    esac
+  done < "$manifest_path"
+fi
+
+mkdir -p "$stage_dir" || exit 1
+
+for entry in "$@"; do
+  source_path="${entry%%|*}"
+  rel_path="${entry#*|}"
+  target_path="$stage_dir/$rel_path"
+  signature="$(stat -c '%Y|%s' "$source_path" 2>/dev/null)" || exit 1
+
+  mkdir -p "${target_path:h}" || exit 1
+  cp -- "$source_path" "$target_path" || exit 1
+  zcompile "$target_path" >/dev/null 2>&1 || true
+
+  printf 'entry=%s|%s|%s\n' "$source_path" "$rel_path" "$signature" >> "$manifest_tmp" || exit 1
+done
+
+bundle_path="$bundles_dir/$bundle_id"
+
+mv "$stage_dir" "$bundle_path" || exit 1
+
+{
+  printf 'bundle=%s\n' "$bundle_id"
+  cat "$manifest_tmp"
+} > "$manifest_ready" || exit 1
+
+mv "$manifest_ready" "$manifest_path" || exit 1
+
+if [[ -n "$old_bundle" && "$old_bundle" != "$bundle_id" ]]; then
+  rm -rf "$bundles_dir/$old_bundle"
+fi

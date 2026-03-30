@@ -22,20 +22,48 @@ fi
 if [ -z "${__tb_log_count:-}" ]; then
   __tb_log_count=0
 fi
+if [ -z "${__tb_log_session_opened:-}" ]; then
+  __tb_log_session_opened=0
+fi
+if [ -z "${__tb_startup_log_path:-}" ]; then
+  __tb_startup_log_path="$HOME/startup.log"
+fi
+
+__tb_append_startup_log() {
+  local line="$1"
+
+  if [ "${__tb_log_session_opened:-0}" -eq 0 ]; then
+    printf -- '-- startup %s --\n' "$__tb_start_ms" >> "$__tb_startup_log_path" 2>/dev/null || true
+    __tb_log_session_opened=1
+  fi
+
+  printf '%s\n' "$line" >> "$__tb_startup_log_path" 2>/dev/null || true
+}
+
 __tb_log() {
   local now
   local delta
+  local line
   now=$(__tb_now_ms)
   delta=$((now - __tb_start_ms))
   if [ $__tb_log_count -eq 0 ]; then
     delta=0
   fi
   __tb_log_count=$((__tb_log_count + 1))
-  echo "[tb init ${delta}] $1"
+  line="[tb init ${delta}] $1"
+  __tb_append_startup_log "$line"
 }
 
 __tb_log_bold() {
-  printf "\033[1m[tb init %s] %s\033[0m\n" "$(__tb_now_ms)" "$1"
+  local msg="[tb init $(__tb_now_ms)] $1"
+  __tb_append_startup_log "$msg"
+  printf "\033[1m%s\033[0m\n" "$msg"
+}
+
+__tb_log_notice() {
+  local msg="[tb note $(__tb_now_ms)] $1"
+  __tb_append_startup_log "$msg"
+  printf "\033[36m%s\033[0m\n" "$msg"
 }
 
 __tb_warnings=()
@@ -43,6 +71,7 @@ __tb_warnings=()
 __tb_log_warning() {
   local msg="[tb warn $(__tb_now_ms)] $1"
   __tb_warnings+=("$msg")
+  __tb_append_startup_log "$msg"
   printf "\033[33m%s\033[0m\n" "$msg"
 }
 
@@ -72,6 +101,7 @@ __tb_toolbox_repo_check_async() {
   local shell_path
   local output_target=""
 
+  [[ -d "$TBDIR/.git" ]] && return 0
   [[ -f "$helper_path" ]] || return 0
 
   shell_path="$(command -v bash)"
@@ -91,22 +121,19 @@ __tb_toolbox_repo_check_async() {
   fi
 }
 
-__tb_log "Sourcing /toolbox/.env"
+__tb_log "Bootstrapping toolbox environment"
 __tb_source_fast "/toolbox/.env"
 
-__tb_log "Scheduling toolbox repository check in $TBDIR"
 __tb_toolbox_repo_check_async
 
 if [ -f "$TBDIR/tbr" ]; then
-  __tb_log "Sourcing $TBDIR/tbr"
+  __tb_log "Loading toolbox commands"
   __tb_source_fast "$TBDIR/tbr"
-  __tb_log "Running tbr"
   tbr
 else
   __tb_log_warning "Toolbox repo is being prepared in the background. Open a new shell when it finishes."
 fi
 
-__tb_log "Running toolbox_initialize"
 if typeset -f toolbox_initialize >/dev/null 2>&1; then
   toolbox_initialize
 fi
