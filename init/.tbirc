@@ -94,8 +94,6 @@ __tb_source_fast() {
   source "$file"
 }
 
-export PATH="/mnt/c/Windows/System32:/mnt/d/Program Files/Microsoft VS Code/bin:/mnt/d/Program Files/Git/cmd:/mnt/d/Visual Studio/Projects/ToolBox/CLI:$PATH"
-
 __tb_toolbox_repo_check_async() {
   local helper_path="$TBDIR/init/tb_repo_check"
   local shell_path
