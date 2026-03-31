@@ -5,4 +5,5 @@ background_init() {
 
     c_background_start >/dev/null 2>&1 || true
     tbr_background_start >/dev/null 2>&1 || true
+    clog_background_start >/dev/null 2>&1 || true
 }
