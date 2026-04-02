@@ -1,0 +1,22 @@
+#!/bin/bash
+
+browse_prepare_argument() {
+    local argument="$1"
+    local wsl_target
+
+    case "$argument" in
+        *://*|about:*|chrome:*|data:*|javascript:*|mailto:*|www.*)
+            printf '%s' "$argument"
+            return 0
+            ;;
+    esac
+
+    wsl_target="$(code_convert_target_to_wsl_path "$argument")" || return $?
+
+    if [ -e "$wsl_target" ]; then
+        code_convert_wsl_path_to_windows_path "$wsl_target"
+        return $?
+    fi
+
+    printf '%s' "$argument"
+}

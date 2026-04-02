@@ -1,0 +1,20 @@
+#!/bin/bash
+
+browse_launch() {
+    local executable_path="$1"
+    local process_id
+    local launch_status
+
+    shift
+
+    "$executable_path" "$@" >/dev/null 2>&1 &
+    launch_status=$?
+    process_id=$!
+
+    if (( launch_status != 0 )); then
+        printf 'Error: Failed to launch "%s".\n' "$executable_path" >&2
+        return 3
+    fi
+
+    builtin disown "$process_id" 2>/dev/null || true
+}

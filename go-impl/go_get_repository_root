@@ -1,0 +1,17 @@
+#!/bin/bash
+
+go_get_repository_root() {
+    local start_path="$1"
+    local git_start_path
+    local repo_root
+
+    git_start_path="$(go_prepare_path_for_git_command "$start_path")" || return $?
+    repo_root="$(git -C "$git_start_path" rev-parse --show-toplevel 2>/dev/null)"
+
+    if [[ -z "$repo_root" ]]; then
+        printf 'Error: "%s" is not inside a git repository.\n' "$start_path" >&2
+        return 2
+    fi
+
+    printf '%s\n' "$repo_root"
+}

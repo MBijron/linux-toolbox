@@ -1,0 +1,58 @@
+#!/bin/bash
+
+go_convert_remote_url_to_browser_url() {
+    local remote_url="$1"
+    local normalized_url="$1"
+    local scheme="https"
+    local host_and_path
+    local host
+    local path_part
+
+    if [[ -z "$remote_url" ]]; then
+        printf '%s\n' 'Error: remote URL is empty.' >&2
+        return 4
+    fi
+
+    case "$normalized_url" in
+        file://*|/*|./*|../*)
+            printf 'Error: remote URL "%s" is local and cannot be opened as an HTTP link.\n' "$remote_url" >&2
+            return 4
+            ;;
+        http://*|https://*)
+            scheme="${normalized_url%%://*}"
+            host_and_path="${normalized_url#*://}"
+            host_and_path="${host_and_path#*@}"
+            ;;
+        ssh://*|git://*|git+ssh://*)
+            host_and_path="${normalized_url#*://}"
+            host_and_path="${host_and_path#*@}"
+            ;;
+        *@*:* )
+            host="${normalized_url%%:*}"
+            host="${host#*@}"
+            path_part="${normalized_url#*:}"
+            path_part="${path_part#/}"
+            path_part="${path_part%.git}"
+            printf '%s://%s/%s\n' "$scheme" "$host" "$path_part"
+            return 0
+            ;;
+        *)
+            printf 'Error: unsupported remote URL format "%s".\n' "$remote_url" >&2
+            return 4
+            ;;
+    esac
+
+    host="${host_and_path%%/*}"
+    path_part="${host_and_path#*/}"
+    host="${host%%:*}"
+
+    if [[ -z "$host" || "$host_and_path" == "$path_part" || -z "$path_part" ]]; then
+        printf 'Error: could not convert remote URL "%s" into a browser URL.\n' "$remote_url" >&2
+        return 4
+    fi
+
+    path_part="${path_part#/}"
+    path_part="${path_part%.git}"
+
+    printf '%s://%s/%s\n' "$scheme" "$host" "$path_part"
+}

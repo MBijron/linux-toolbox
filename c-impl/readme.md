@@ -30,6 +30,7 @@
 - `filtering/c_filter_by_abbreviation_text`: partial shortcut match.
 - `filtering/c_filter_by_folder_text`: partial folder-name match.
 - `navigation/c_find_and_cd`: search flow entrypoint after arg parsing.
+- `navigation/c_choose_path`: selects a repo path from c results, including interactive disambiguation.
 - `navigation/c_choose_and_cd`: multi-match prompt and destination action.
 - `presentation/c_print_repo_map`: colored repo list output.
 - `text/c_abbreviate`: builds shortcuts from folder names.

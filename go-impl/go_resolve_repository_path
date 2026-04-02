@@ -1,0 +1,24 @@
+#!/bin/bash
+
+go_resolve_repository_path() {
+    local query="$1"
+    local preferred_index="$2"
+    local results
+
+    if [[ -z "$query" ]]; then
+        printf '%s\n' 'Usage: go [query] [preferred-index]' >&2
+        return 1
+    fi
+
+    results="$(c_filter_by_abbreviation "$query")"
+
+    if [[ -z "$results" ]]; then
+        results="$(c_filter_by_abbreviation_text "$query")"
+    fi
+
+    if [[ -z "$results" ]]; then
+        results="$(c_filter_by_folder_text "$query")"
+    fi
+
+    c_choose_path "$results" "$preferred_index"
+}

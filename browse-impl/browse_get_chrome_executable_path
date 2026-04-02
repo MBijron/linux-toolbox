@@ -1,0 +1,12 @@
+#!/bin/bash
+
+browse_get_chrome_executable_path() {
+    local windows_path='C:\Program Files\Google\Chrome\Application\chrome.exe'
+    local executable_path='/mnt/c/Program Files/Google/Chrome/Application/chrome.exe'
+
+    if command -v wslpath >/dev/null 2>&1; then
+        executable_path="$(wslpath -u "$windows_path" 2>/dev/null || printf '%s' "$executable_path")"
+    fi
+
+    printf '%s' "$executable_path"
+}

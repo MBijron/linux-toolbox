@@ -1,0 +1,28 @@
+#!/bin/bash
+
+go_prepare_path_for_git_command() {
+    local repo_path="$1"
+    local git_alias
+    local git_command
+    local converted_path
+
+    if [[ -z "$repo_path" ]]; then
+        printf '%s\n' 'Error: repository path is empty.' >&2
+        return 5
+    fi
+
+    git_alias="$(alias git 2>/dev/null || true)"
+    git_command="$(command -v git 2>/dev/null || true)"
+
+    if [[ "$git_alias" == *"git.exe"* || "$git_command" == *.exe ]]; then
+        if command -v wslpath >/dev/null 2>&1 && [[ "$repo_path" == /* ]]; then
+            converted_path="$(wslpath -w "$repo_path" 2>/dev/null)"
+            if [[ -n "$converted_path" ]]; then
+                printf '%s\n' "$converted_path"
+                return 0
+            fi
+        fi
+    fi
+
+    printf '%s\n' "$repo_path"
+}

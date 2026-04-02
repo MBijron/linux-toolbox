@@ -1,0 +1,31 @@
+#!/bin/bash
+
+browse() {
+    local executable_path
+    local prepared_argument
+    local launch_arguments=()
+    local argument
+
+    if [ $# -eq 0 ]; then
+        printf '%s\n' 'Usage: browse <target> [additional targets or Chrome flags...]' >&2
+        return 1
+    fi
+
+    executable_path="$(browse_get_chrome_executable_path)" || return $?
+    browse_validate_executable_exists "$executable_path" || return $?
+
+    for argument in "$@"; do
+        prepared_argument="$(browse_prepare_argument "$argument")" || return $?
+        launch_arguments+=("$prepared_argument")
+    done
+
+    if [ "${#launch_arguments[@]}" -eq 1 ]; then
+        printf '%s\n' "${launch_arguments[0]}"
+    fi
+
+    browse_launch "$executable_path" "${launch_arguments[@]}" || return $?
+
+    return 0
+}
+
+_create_command_wrapper_for_function "browse"

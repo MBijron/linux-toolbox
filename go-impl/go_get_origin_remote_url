@@ -1,0 +1,17 @@
+#!/bin/bash
+
+go_get_origin_remote_url() {
+    local repo_root="$1"
+    local git_repo_root
+    local origin_url
+
+    git_repo_root="$(go_prepare_path_for_git_command "$repo_root")" || return $?
+    origin_url="$(git -C "$git_repo_root" remote get-url origin 2>/dev/null)"
+
+    if [[ -z "$origin_url" ]]; then
+        printf 'Error: git remote "origin" was not found for "%s".\n' "$repo_root" >&2
+        return 3
+    fi
+
+    printf '%s\n' "$origin_url"
+}
