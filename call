@@ -22,12 +22,13 @@ call() {
         return 0
     fi
 
-    PROGRAM_NAME=$1
+    local PROGRAM_NAME=$1
+    local PROGRAM_PATH=""
     shift
-    PROGRAM_PATH=$(winwhere "$PROGRAM_NAME")
+    PROGRAM_PATH="$(winwhere "$PROGRAM_NAME")"
 
     # Check if the program is executable
-    if [ -x "$PROGRAM_PATH" ]; then
+    if [ -n "$PROGRAM_PATH" ] && [ -x "$PROGRAM_PATH" ]; then
         "$PROGRAM_PATH" "$@"
     else
         echo "Error: $PROGRAM_NAME not found. Please ensure it is installed and in your PATH."

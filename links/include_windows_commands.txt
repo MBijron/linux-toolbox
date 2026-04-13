@@ -1,0 +1,6 @@
+choco
+heidisql
+node
+npm
+nvm
+powershell

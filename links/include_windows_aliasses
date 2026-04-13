@@ -1,0 +1,8 @@
+#!/bin/bash
+
+unalias include_windows_aliasses >/dev/null 2>&1 || true
+
+include_windows_aliasses() {
+  __tb_add_to_path_write_startup_cache
+  __tb_add_to_path_apply_startup_cache >/dev/null 2>&1 || true
+}

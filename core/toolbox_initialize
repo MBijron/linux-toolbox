@@ -12,4 +12,11 @@ toolbox_initialize() {
   if [[ ":$PATH:" != *":$bin_dir:"* ]]; then
     export PATH="$bin_dir:$PATH"
   fi
+
+  if typeset -f __tb_add_to_path_apply_startup_cache >/dev/null 2>&1; then
+    if ! __tb_add_to_path_apply_startup_cache; then
+      __tb_add_to_path_refresh_from_tracked_files >/dev/null 2>&1 || true
+      __tb_add_to_path_apply_startup_cache >/dev/null 2>&1 || true
+    fi
+  fi
 }

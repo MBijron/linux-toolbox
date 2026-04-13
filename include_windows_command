@@ -1,0 +1,127 @@
+#!/bin/bash
+
+unalias include_windows_command >/dev/null 2>&1 || true
+
+include_windows_command() {
+  local command_file="$TBDIR/links/include_windows_commands.txt"
+  local alias_file="$TBDIR/links/include_windows_aliasses.txt"
+  local add_alias="0"
+  local arg=""
+  local command_name=""
+  local line=""
+  local existing_line=""
+  local alias_target=""
+  local already_present="0"
+  local alias_present="0"
+  local -a requested_commands=()
+  local -a commands_to_add=()
+  local -a commands_to_alias=()
+
+  if [ "$#" -eq 0 ]; then
+    printf 'Usage: include_windows_command [-a|--alias] <command> [command ...]\n' >&2
+    return 1
+  fi
+
+  mkdir -p "$TBDIR/links"
+  touch "$command_file"
+  touch "$alias_file"
+
+  for arg in "$@"; do
+    case "$arg" in
+      -a|--alias)
+        add_alias="1"
+        ;;
+      -help|--help)
+        printf 'Usage: include_windows_command [-a|--alias] <command> [command ...]\n'
+        return 0
+        ;;
+      -*)
+        printf 'Unknown option: %s\n' "$arg" >&2
+        return 1
+        ;;
+      *)
+        command_name="$(__tb_add_to_path_normalize_command_name "$arg")"
+
+        if [ -n "$command_name" ] && ! __tb_add_to_path_array_contains "$command_name" "${requested_commands[@]}"; then
+          requested_commands+=("$command_name")
+        fi
+        ;;
+    esac
+  done
+
+  if [ "${#requested_commands[@]}" -eq 0 ]; then
+    printf 'Usage: include_windows_command [-a|--alias] <command> [command ...]\n' >&2
+    return 1
+  fi
+
+  for command_name in "${requested_commands[@]}"; do
+    if ! __tb_windows_command_exists "$command_name"; then
+      continue
+    fi
+
+    already_present="0"
+
+    while IFS= read -r line || [ -n "$line" ]; do
+      existing_line="$(__tb_add_to_path_normalize_command_name "$line")"
+
+      if [ "$existing_line" = "$command_name" ]; then
+        already_present="1"
+        break
+      fi
+    done < "$command_file"
+
+    if [ "$already_present" = "1" ]; then
+      printf "%s not added because it's already in the list\n" "$command_name"
+    else
+      printf '%s\n' "$command_name" >> "$command_file"
+      printf '%s added\n' "$command_name"
+
+      if ! __tb_add_to_path_array_contains "$command_name" "${commands_to_add[@]}"; then
+        commands_to_add+=("$command_name")
+      fi
+    fi
+
+    if [ "$add_alias" = "1" ] && ! __tb_add_to_path_array_contains "$command_name" "${commands_to_alias[@]}"; then
+      commands_to_alias+=("$command_name")
+    fi
+  done
+
+  if [ "${#commands_to_add[@]}" -gt 0 ]; then
+    __tb_add_to_path "${commands_to_add[@]}"
+  fi
+
+  if [ "$add_alias" = "1" ] && [ "${#commands_to_alias[@]}" -gt 0 ]; then
+    __tb_add_to_path "${commands_to_alias[@]}"
+  fi
+
+  for command_name in "${commands_to_alias[@]}"; do
+    alias_target="$(__tb_windows_alias_target_name "$command_name")"
+
+    if [ -z "$alias_target" ]; then
+      printf '%s alias not created because %s.exe, %s.bat, or %s.cmd was not found\n' "$command_name" "$command_name" "$command_name" "$command_name"
+      continue
+    fi
+
+    alias_present="0"
+
+    while IFS= read -r line || [ -n "$line" ]; do
+      existing_line="$(__tb_add_to_path_normalize_command_name "$line")"
+
+      if [ "$existing_line" = "$command_name" ]; then
+        alias_present="1"
+        break
+      fi
+    done < "$alias_file"
+
+    if [ "$alias_present" = "1" ]; then
+      printf '%s alias not added because it is already in the list\n' "$command_name"
+    else
+      printf '%s\n' "$command_name" >> "$alias_file"
+      printf '%s alias added\n' "$command_name"
+    fi
+
+    alias "$command_name=$alias_target"
+  done
+}
+
+_create_command_wrapper_for_function "include_windows_command"

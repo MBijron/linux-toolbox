@@ -1,9 +1,10 @@
 #!/bin/bash
 
 winwhere() {
-    output=$(where.exe $@ | head -n 1 | tr -d '\r')
-    first=$(udir "$(printf '%s\n' "$output")")
-    echo "$first"
+    local output=""
+
+    output=$(where.exe "$@" 2>&1 | head -n 1 | tr -d '\r')
+    udir "$output"
 }
 
 _create_command_wrapper_for_function "winwhere"
