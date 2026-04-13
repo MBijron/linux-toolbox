@@ -3,6 +3,8 @@
 unalias include_windows_commands >/dev/null 2>&1 || true
 
 include_windows_commands() {
-  __tb_add_to_path_refresh_from_tracked_files
-  __tb_add_to_path_apply_startup_cache >/dev/null 2>&1 || true
+  if ! __tb_windows_path_apply_startup_cache; then
+    __tb_windows_path_refresh_cache || return 1
+    __tb_windows_path_apply_startup_cache >/dev/null 2>&1 || true
+  fi
 }

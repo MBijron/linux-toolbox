@@ -1,0 +1,67 @@
+#!/bin/bash
+
+windows_path_background_pid_path() {
+    printf '%s/.windows_path_background.pid\n' "${TBDIR:-/toolbox}"
+}
+
+windows_path_background_is_running() {
+    local pid_path
+    local background_pid
+
+    pid_path="$(windows_path_background_pid_path)"
+    [[ -f "$pid_path" ]] || return 1
+
+    if ! read -r background_pid < "$pid_path"; then
+        rm -f "$pid_path"
+        return 1
+    fi
+
+    if [[ ! "$background_pid" =~ ^[0-9]+$ ]]; then
+        rm -f "$pid_path"
+        return 1
+    fi
+
+    if kill -0 "$background_pid" 2>/dev/null; then
+        return 0
+    fi
+
+    rm -f "$pid_path"
+    return 1
+}
+
+windows_path_background_run_service() {
+    local poll_interval_seconds="${WINDOWS_PATH_BACKGROUND_POLL_INTERVAL:-600}"
+
+    while true; do
+        include_windows_command --refresh-cache >/dev/null 2>&1 || true
+        sleep "$poll_interval_seconds" || return 0
+    done
+}
+
+windows_path_background_start() {
+    local pid_path
+    local shell_path
+    local background_pid
+
+    if windows_path_background_is_running; then
+        return 0
+    fi
+
+    pid_path="$(windows_path_background_pid_path)"
+    shell_path="$(command -v bash)"
+    [[ -n "$shell_path" ]] || return 1
+
+    TOOLBOX_SKIP_BACKGROUND_INIT=1 \
+    TBDIR="${TBDIR:-/toolbox}" \
+    nohup "$shell_path" -lc 'source "$TBDIR/.core" >/dev/null 2>&1 || exit 1; windows_path_background_run_service' \
+        >/dev/null 2>&1 &
+    background_pid=$!
+
+    if [[ ! "$background_pid" =~ ^[0-9]+$ ]]; then
+        return 1
+    fi
+
+    printf '%s\n' "$background_pid" > "$pid_path"
+    disown "$background_pid" 2>/dev/null || true
+    return 0
+}

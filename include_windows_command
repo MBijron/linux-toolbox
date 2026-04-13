@@ -3,36 +3,32 @@
 unalias include_windows_command >/dev/null 2>&1 || true
 
 include_windows_command() {
-  local command_file="$TBDIR/links/include_windows_commands.txt"
-  local alias_file="$TBDIR/links/include_windows_aliasses.txt"
-  local add_alias="0"
+  local shim_file="$(__tb_windows_shim_list_path)"
+  local refresh_cache="0"
   local arg=""
   local command_name=""
   local line=""
   local existing_line=""
-  local alias_target=""
-  local already_present="0"
-  local alias_present="0"
+  local shim_target=""
+  local shim_present="0"
   local -a requested_commands=()
   local -a commands_to_add=()
-  local -a commands_to_alias=()
 
   if [ "$#" -eq 0 ]; then
-    printf 'Usage: include_windows_command [-a|--alias] <command> [command ...]\n' >&2
+    printf 'Usage: include_windows_command [--refresh-cache] <command> [command ...]\n' >&2
     return 1
   fi
 
   mkdir -p "$TBDIR/links"
-  touch "$command_file"
-  touch "$alias_file"
+  touch "$shim_file"
 
   for arg in "$@"; do
     case "$arg" in
-      -a|--alias)
-        add_alias="1"
+      -r|--refresh-cache)
+        refresh_cache="1"
         ;;
       -help|--help)
-        printf 'Usage: include_windows_command [-a|--alias] <command> [command ...]\n'
+        printf 'Usage: include_windows_command [--refresh-cache] <command> [command ...]\n'
         return 0
         ;;
       -*)
@@ -49,79 +45,62 @@ include_windows_command() {
     esac
   done
 
+  if [ "$refresh_cache" = "1" ]; then
+    __tb_add_to_path --refresh-cache || return 1
+    printf 'Windows PATH cache refreshed\n'
+  fi
+
   if [ "${#requested_commands[@]}" -eq 0 ]; then
-    printf 'Usage: include_windows_command [-a|--alias] <command> [command ...]\n' >&2
+    if [ "$refresh_cache" = "1" ]; then
+      return 0
+    fi
+
+    printf 'Usage: include_windows_command [--refresh-cache] <command> [command ...]\n' >&2
     return 1
   fi
 
+  __tb_windows_path_load_cache
+  if [ -z "$__tb_windows_cached_path" ] || [ "$refresh_cache" = "1" ]; then
+    __tb_add_to_path --refresh-cache || return 1
+    __tb_windows_path_load_cache
+  fi
+
   for command_name in "${requested_commands[@]}"; do
-    if ! __tb_windows_command_exists "$command_name"; then
+    shim_target="$(__tb_windows_shim_target_name "$command_name" "$__tb_windows_cached_path")"
+
+    if [ -z "$shim_target" ]; then
+      printf '%s shim not created because %s.exe, %s.bat, or %s.cmd was not found\n' "$command_name" "$command_name" "$command_name" "$command_name"
       continue
     fi
 
-    already_present="0"
+    if ! __tb_add_to_path_array_contains "$command_name" "${commands_to_add[@]}"; then
+      commands_to_add+=("$command_name")
+    fi
+  done
+
+  for command_name in "${commands_to_add[@]}"; do
+    shim_present="0"
 
     while IFS= read -r line || [ -n "$line" ]; do
       existing_line="$(__tb_add_to_path_normalize_command_name "$line")"
 
       if [ "$existing_line" = "$command_name" ]; then
-        already_present="1"
+        shim_present="1"
         break
       fi
-    done < "$command_file"
+    done < "$shim_file"
 
-    if [ "$already_present" = "1" ]; then
-      printf "%s not added because it's already in the list\n" "$command_name"
+    if [ "$shim_present" = "1" ]; then
+      printf '%s shim not added because it is already in the list\n' "$command_name"
     else
-      printf '%s\n' "$command_name" >> "$command_file"
-      printf '%s added\n' "$command_name"
-
-      if ! __tb_add_to_path_array_contains "$command_name" "${commands_to_add[@]}"; then
-        commands_to_add+=("$command_name")
-      fi
-    fi
-
-    if [ "$add_alias" = "1" ] && ! __tb_add_to_path_array_contains "$command_name" "${commands_to_alias[@]}"; then
-      commands_to_alias+=("$command_name")
+      printf '%s\n' "$command_name" >> "$shim_file"
+      printf '%s shim added\n' "$command_name"
     fi
   done
 
-  if [ "${#commands_to_add[@]}" -gt 0 ]; then
-    __tb_add_to_path "${commands_to_add[@]}"
-  fi
-
-  if [ "$add_alias" = "1" ] && [ "${#commands_to_alias[@]}" -gt 0 ]; then
-    __tb_add_to_path "${commands_to_alias[@]}"
-  fi
-
-  for command_name in "${commands_to_alias[@]}"; do
-    alias_target="$(__tb_windows_alias_target_name "$command_name")"
-
-    if [ -z "$alias_target" ]; then
-      printf '%s alias not created because %s.exe, %s.bat, or %s.cmd was not found\n' "$command_name" "$command_name" "$command_name" "$command_name"
-      continue
-    fi
-
-    alias_present="0"
-
-    while IFS= read -r line || [ -n "$line" ]; do
-      existing_line="$(__tb_add_to_path_normalize_command_name "$line")"
-
-      if [ "$existing_line" = "$command_name" ]; then
-        alias_present="1"
-        break
-      fi
-    done < "$alias_file"
-
-    if [ "$alias_present" = "1" ]; then
-      printf '%s alias not added because it is already in the list\n' "$command_name"
-    else
-      printf '%s\n' "$command_name" >> "$alias_file"
-      printf '%s alias added\n' "$command_name"
-    fi
-
-    alias "$command_name=$alias_target"
-  done
+  __tb_windows_shim_refresh || return 1
+  __tb_windows_path_write_startup_cache || return 1
+  __tb_windows_path_apply_startup_cache >/dev/null 2>&1 || true
 }
 
 _create_command_wrapper_for_function "include_windows_command"

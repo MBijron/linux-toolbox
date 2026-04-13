@@ -3,8 +3,7 @@
 .env
 /bin
 *.cache
-!/links/include_windows_commands.txt
-!/links/include_windows_aliasses.txt
+!/links/include_windows_shims.txt
 *.pid
 *.zwc
 .zcompdump

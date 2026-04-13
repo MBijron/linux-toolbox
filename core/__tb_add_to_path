@@ -1,11 +1,19 @@
 #!/bin/bash
 
-__tb_add_to_path_cache_path() {
-  printf '%s/core/__tb_add_to_path.cache\n' "$TBDIR"
+__tb_windows_path_cache_path() {
+  printf '%s/core/windows_path.cache\n' "$TBDIR"
 }
 
-__tb_add_to_path_startup_cache_path() {
-  printf '%s/core/__tb_add_to_path.startup.cache\n' "$TBDIR"
+__tb_windows_path_startup_cache_path() {
+  printf '%s/core/windows_path.startup.cache\n' "$TBDIR"
+}
+
+__tb_windows_shim_list_path() {
+  printf '%s/links/include_windows_shims.txt\n' "$TBDIR"
+}
+
+__tb_windows_shim_manifest_path() {
+  printf '%s/core/windows_shims.cache\n' "$TBDIR"
 }
 
 __tb_add_to_path_trim_line() {
@@ -69,15 +77,16 @@ __tb_windows_command_exists() {
   __tb_add_to_path_find_first_valid_path "$1" >/dev/null 2>&1
 }
 
-__tb_windows_alias_target_name() {
+__tb_windows_shim_target_name() {
   local command_name="$1"
+  local path_value="${2:-${__tb_windows_cached_path:-$PATH}}"
   local suffix=""
   local candidate=""
 
   for suffix in exe bat cmd; do
     candidate="${command_name}.${suffix}"
 
-    if command -v "$candidate" >/dev/null 2>&1; then
+    if PATH="$path_value" command -v "$candidate" >/dev/null 2>&1; then
       printf '%s\n' "$candidate"
       return 0
     fi
@@ -86,118 +95,14 @@ __tb_windows_alias_target_name() {
   return 1
 }
 
-__tb_add_to_path_cache_loaded="0"
-__tb_add_to_path_cache_rows=""
-
-__tb_add_to_path_load_cache() {
-  local cache_path=""
-  local first_line=""
-
-  if [ "${__tb_add_to_path_cache_loaded:-0}" = "1" ]; then
-    return 0
-  fi
-
-  __tb_add_to_path_cache_loaded="1"
-  __tb_add_to_path_cache_rows=""
-  cache_path="$(__tb_add_to_path_cache_path)"
-
-  if [ ! -f "$cache_path" ]; then
-    return 0
-  fi
-
-  IFS= read -r first_line < "$cache_path" || return 0
-
-  case "$first_line" in
-    __tb_add_to_path_cache_rows=*) source "$cache_path" ;;
-    *) return 0 ;;
-  esac
-}
-
-__tb_add_to_path_get_cache_row() {
-  local command_name="$1"
-  local row=""
-  local row_command=""
-  local row_status=""
-  local row_path=""
-  local row_directory=""
-
-  __tb_add_to_path_cache_status=""
-  __tb_add_to_path_cache_resolved_path=""
-  __tb_add_to_path_cache_directory=""
-
-  __tb_add_to_path_load_cache
-
-  if [ -z "$__tb_add_to_path_cache_rows" ]; then
-    return 1
-  fi
-
-  while IFS= read -r row || [ -n "$row" ]; do
-    IFS=$'\t' read -r row_command row_status row_path row_directory <<< "$row"
-
-    if [ "$row_command" != "$command_name" ]; then
-      continue
-    fi
-
-    __tb_add_to_path_cache_status="$row_status"
-    __tb_add_to_path_cache_resolved_path="$row_path"
-    __tb_add_to_path_cache_directory="$row_directory"
-    return 0
-  done <<< "$__tb_add_to_path_cache_rows"
-
-  return 1
-}
-
-__tb_add_to_path_set_cache_row() {
-  local command_name="$1"
-  local cache_status="$2"
-  local resolved_path="$3"
-  local directory_path="$4"
-  local row=""
-  local row_command=""
-  local new_rows=""
-  local replacement_row=""
-  local replaced="0"
-
-  __tb_add_to_path_load_cache
-  replacement_row="${command_name}"$'\t'"${cache_status}"$'\t'"${resolved_path}"$'\t'"${directory_path}"
-
-  if [ -n "$__tb_add_to_path_cache_rows" ]; then
-    while IFS= read -r row || [ -n "$row" ]; do
-      IFS=$'\t' read -r row_command _ <<< "$row"
-
-      if [ "$row_command" = "$command_name" ]; then
-        row="$replacement_row"
-        replaced="1"
-      fi
-
-      if [ -n "$new_rows" ]; then
-        new_rows+=$'\n'
-      fi
-
-      new_rows+="$row"
-    done <<< "$__tb_add_to_path_cache_rows"
-  fi
-
-  if [ "$replaced" != "1" ]; then
-    if [ -n "$new_rows" ]; then
-      new_rows+=$'\n'
-    fi
-
-    new_rows+="$replacement_row"
-  fi
-
-  __tb_add_to_path_cache_rows="$new_rows"
-}
-
-__tb_add_to_path_collect_commands_from_file() {
-  local command_file="$1"
+__tb_windows_shim_collect_commands() {
+  local shim_file=""
   local line=""
   local command_name=""
   local -a commands=()
 
-  if [ ! -s "$command_file" ]; then
-    return 0
-  fi
+  shim_file="$(__tb_windows_shim_list_path)"
+  [ -s "$shim_file" ] || return 0
 
   while IFS= read -r line || [ -n "$line" ]; do
     command_name="$(__tb_add_to_path_normalize_command_name "$line")"
@@ -209,381 +114,127 @@ __tb_add_to_path_collect_commands_from_file() {
     if ! __tb_add_to_path_array_contains "$command_name" "${commands[@]}"; then
       commands+=("$command_name")
     fi
-  done < "$command_file"
+  done < "$shim_file"
 
   if [ "${#commands[@]}" -gt 0 ]; then
     printf '%s\n' "${commands[@]}"
   fi
 }
 
-__tb_add_to_path_add_directory() {
-  local directory_path="$1"
-
-  if [ -z "$directory_path" ] || [ ! -d "$directory_path" ]; then
-    return 0
-  fi
-
-  if [[ ":$PATH:" == *":$directory_path:"* ]]; then
-    return 0
-  fi
-
-  export PATH="$directory_path:$PATH"
-}
-
-__tb_add_to_path_apply_startup_cache() {
-  local startup_cache=""
-
-  startup_cache="$(__tb_add_to_path_startup_cache_path)"
-  [ -f "$startup_cache" ] || return 1
-
-  source "$startup_cache"
-}
-
-__tb_add_to_path_build_alias_target_from_cache() {
+__tb_windows_shim_delete_managed_file() {
   local command_name="$1"
-  local directory_path=""
-  local suffix=""
-  local candidate_path=""
+  local shim_path="$TBDIR/bin/$command_name"
+  local first_line=""
+  local second_line=""
 
-  if ! __tb_add_to_path_get_cache_row "$command_name"; then
-    return 1
+  [ -f "$shim_path" ] || return 0
+
+  IFS= read -r first_line < "$shim_path" || return 0
+  IFS= read -r second_line < <(sed -n '2p' "$shim_path") || true
+
+  if [ "$first_line" = '#!/bin/bash' ] && [ "$second_line" = '# toolbox-windows-shim' ]; then
+    rm -f "$shim_path"
   fi
-
-  if [ "$__tb_add_to_path_cache_status" != "found" ] || [ -z "$__tb_add_to_path_cache_directory" ]; then
-    return 1
-  fi
-
-  directory_path="$__tb_add_to_path_cache_directory"
-
-  for suffix in exe bat cmd; do
-    candidate_path="$directory_path/${command_name}.${suffix}"
-
-    if [ -e "$candidate_path" ]; then
-      printf '%s.%s\n' "$command_name" "$suffix"
-      return 0
-    fi
-  done
-
-  return 1
 }
 
-__tb_add_to_path_write_cache() {
-  local cache_path=""
-  local temporary_path=""
-
-  cache_path="$(__tb_add_to_path_cache_path)"
-  temporary_path="${cache_path}.tmp.$$"
-
-  printf '__tb_add_to_path_cache_rows=%q\n' "$__tb_add_to_path_cache_rows" > "$temporary_path" || return 1
-  mv "$temporary_path" "$cache_path"
-}
-
-__tb_add_to_path_write_startup_cache() {
-  local startup_cache=""
-  local temporary_path=""
-  local alias_file="$TBDIR/links/include_windows_aliasses.txt"
-  local row=""
-  local row_status=""
-  local row_directory=""
-  local line=""
-  local command_name=""
-  local alias_target=""
-  local escaped_directory=""
-  local escaped_prefix=""
-  local -a unique_directories=()
-
-  __tb_add_to_path_load_cache
-  startup_cache="$(__tb_add_to_path_startup_cache_path)"
-  temporary_path="${startup_cache}.tmp.$$"
-
-  if [ -n "$__tb_add_to_path_cache_rows" ]; then
-    while IFS= read -r row || [ -n "$row" ]; do
-      IFS=$'\t' read -r _ row_status _ row_directory <<< "$row"
-
-      if [ "$row_status" != "found" ] || [ -z "$row_directory" ]; then
-        continue
-      fi
-
-      if ! __tb_add_to_path_array_contains "$row_directory" "${unique_directories[@]}"; then
-        unique_directories+=("$row_directory")
-      fi
-    done <<< "$__tb_add_to_path_cache_rows"
-  fi
+__tb_windows_shim_write_file() {
+  local command_name="$1"
+  local shim_target="$2"
+  local shim_path="$TBDIR/bin/$command_name"
+  local temporary_path="${shim_path}.tmp.$$"
 
   {
     printf '#!/bin/bash\n'
-
-    for row_directory in "${unique_directories[@]}"; do
-      escaped_directory="$(printf '%q' "$row_directory")"
-      escaped_prefix="$(printf '%q' "$row_directory:")"
-      printf 'case ":$PATH:" in\n'
-      printf '  *:%s:*) ;;\n' "$escaped_directory"
-      printf '  *) export PATH=%s"$PATH" ;;\n' "$escaped_prefix"
-      printf 'esac\n'
-    done
-
-    if [ -s "$alias_file" ]; then
-      while IFS= read -r line || [ -n "$line" ]; do
-        command_name="$(__tb_add_to_path_normalize_command_name "$line")"
-
-        case "$command_name" in
-          ''|'#'*) continue ;;
-        esac
-
-        alias_target="$(__tb_add_to_path_build_alias_target_from_cache "$command_name")"
-
-        if [ -n "$alias_target" ]; then
-          printf 'alias %s=%q\n' "$command_name" "$alias_target"
-        fi
-      done < "$alias_file"
-    fi
+    printf '# toolbox-windows-shim\n'
+    printf 'target=%q\n' "$shim_target"
+    printf 'converted_args=()\n'
+    printf 'arg=""\n'
+    printf 'converted_arg=""\n'
+    printf 'for arg in "$@"; do\n'
+    printf '  if [ -e "$arg" ]; then\n'
+    printf '    converted_arg="$(wslpath -w "$arg" 2>/dev/null || printf %%s "$arg")"\n'
+    printf '  else\n'
+    printf '    converted_arg="$arg"\n'
+    printf '  fi\n'
+    printf '  converted_args+=("$converted_arg")\n'
+    printf 'done\n'
+    printf 'case "$target" in\n'
+    printf '  *.cmd|*.bat) exec cmd.exe /d /c "$target" "${converted_args[@]}" ;;\n'
+    printf '  *) exec "$target" "${converted_args[@]}" ;;\n'
+    printf 'esac\n'
   } > "$temporary_path" || return 1
 
-  mv "$temporary_path" "$startup_cache"
+  chmod +x "$temporary_path" || return 1
+  mv "$temporary_path" "$shim_path"
 }
 
-__tb_add_to_path_refresh_commands() {
-  local command_name=""
-  local resolved_path=""
-  local directory_path=""
-
-  for command_name in "$@"; do
-    resolved_path="$(__tb_add_to_path_find_first_valid_path "$command_name")"
-
-    if [ -n "$resolved_path" ]; then
-      directory_path="${resolved_path%/*}"
-      __tb_add_to_path_set_cache_row "$command_name" "found" "$resolved_path" "$directory_path"
-    else
-      __tb_add_to_path_set_cache_row "$command_name" "no path found" "" ""
-    fi
-  done
-}
-
-__tb_add_to_path_refresh_from_tracked_files() {
-  local command_file="$TBDIR/links/include_windows_commands.txt"
+__tb_windows_shim_refresh() {
+  local manifest_path=""
+  local temporary_path=""
   local line=""
-  local -a commands=()
+  local command_name=""
+  local shim_target=""
+  local -a previous_commands=()
+  local -a tracked_commands=()
+
+  manifest_path="$(__tb_windows_shim_manifest_path)"
+  temporary_path="${manifest_path}.tmp.$$"
+  rm -f "$TBDIR/links/include_windows_aliasses" "$TBDIR/links/include_windows_aliasses.txt"
+  mkdir -p "$TBDIR/bin"
+
+  if [ -f "$manifest_path" ]; then
+    while IFS= read -r line || [ -n "$line" ]; do
+      command_name="$(__tb_add_to_path_normalize_command_name "$line")"
+
+      if [ -n "$command_name" ] && ! __tb_add_to_path_array_contains "$command_name" "${previous_commands[@]}"; then
+        previous_commands+=("$command_name")
+      fi
+    done < "$manifest_path"
+  fi
 
   while IFS= read -r line; do
-    if [ -n "$line" ] && ! __tb_add_to_path_array_contains "$line" "${commands[@]}"; then
-      commands+=("$line")
+    if [ -n "$line" ] && ! __tb_add_to_path_array_contains "$line" "${tracked_commands[@]}"; then
+      tracked_commands+=("$line")
     fi
-  done < <(__tb_add_to_path_collect_commands_from_file "$command_file")
+  done < <(__tb_windows_shim_collect_commands)
 
-  if [ "${#commands[@]}" -eq 0 ]; then
-    return 0
-  fi
-
-  __tb_add_to_path_refresh_commands "${commands[@]}"
-  __tb_add_to_path_write_cache || return 1
-  __tb_add_to_path_write_startup_cache || return 1
-}
-
-__tb_add_to_path_from_file() {
-  local command_file="$1"
-  local line=""
-  local -a commands=()
-
-  while IFS= read -r line; do
-    if [ -n "$line" ] && ! __tb_add_to_path_array_contains "$line" "${commands[@]}"; then
-      commands+=("$line")
+  for command_name in "${previous_commands[@]}"; do
+    if ! __tb_add_to_path_array_contains "$command_name" "${tracked_commands[@]}"; then
+      __tb_windows_shim_delete_managed_file "$command_name"
     fi
-  done < <(__tb_add_to_path_collect_commands_from_file "$command_file")
-
-  if [ "${#commands[@]}" -eq 0 ]; then
-    return 0
-  fi
-
-  __tb_add_to_path "${commands[@]}"
-}
-
-__tb_add_to_path_print_help() {
-  cat <<'EOF'
-Usage: __tb_add_to_path [options] <command> [command ...]
-
-Options:
-  -r, --refresh  Refresh the full command cache before adding paths.
-  -help, --help  Show this help message.
-
-Each command should be passed as its own argument.
-EOF
-}
-
-__tb_add_to_path() {
-  local refresh_cache="0"
-  local command_name=""
-  local -a requested_commands=()
-  local -a refresh_commands=()
-
-  while [ "$#" -gt 0 ]; do
-    case "$1" in
-      -r|--refresh)
-        refresh_cache="1"
-        ;;
-      -help|--help)
-        __tb_add_to_path_print_help
-        return 0
-        ;;
-      --)
-        shift
-        continue
-        ;;
-      -*)
-        printf 'Unknown option: %s\n' "$1" >&2
-        __tb_add_to_path_print_help >&2
-        return 1
-        ;;
-      *)
-        command_name="$(__tb_add_to_path_normalize_command_name "$1")"
-
-        if [ -n "$command_name" ] && ! __tb_add_to_path_array_contains "$command_name" "${requested_commands[@]}"; then
-          requested_commands+=("$command_name")
-        fi
-        ;;
-    esac
-
-    shift
   done
 
-  if [ "$refresh_cache" = "1" ]; then
-    while IFS= read -r command_name; do
-      if [ -n "$command_name" ] && ! __tb_add_to_path_array_contains "$command_name" "${refresh_commands[@]}"; then
-        refresh_commands+=("$command_name")
-      fi
-    done < <(__tb_add_to_path_collect_commands_from_file "$TBDIR/links/include_windows_commands.txt")
+  : > "$temporary_path" || return 1
 
-    for command_name in "${requested_commands[@]}"; do
-      if ! __tb_add_to_path_array_contains "$command_name" "${refresh_commands[@]}"; then
-        refresh_commands+=("$command_name")
-      fi
-    done
+  for command_name in "${tracked_commands[@]}"; do
+    shim_target="$(__tb_windows_shim_target_name "$command_name" "$__tb_windows_cached_path")"
 
-    if [ "${#refresh_commands[@]}" -gt 0 ]; then
-      __tb_add_to_path_refresh_commands "${refresh_commands[@]}"
-      __tb_add_to_path_write_cache || return 1
-      __tb_add_to_path_write_startup_cache || return 1
-    fi
-  else
-    for command_name in "${requested_commands[@]}"; do
-      if ! __tb_add_to_path_get_cache_row "$command_name"; then
-        __tb_add_to_path_refresh_commands "$command_name"
-        __tb_add_to_path_get_cache_row "$command_name" >/dev/null 2>&1 || true
-      fi
-
-      if [ "$__tb_add_to_path_cache_status" = "found" ]; then
-        __tb_add_to_path_add_directory "$__tb_add_to_path_cache_directory"
-      fi
-    done
-
-    if [ "${#requested_commands[@]}" -gt 0 ]; then
-      __tb_add_to_path_write_cache || return 1
-      __tb_add_to_path_write_startup_cache || return 1
-    fi
-  fi
-
-  __tb_add_to_path_apply_startup_cache >/dev/null 2>&1 || true
-}
-#!/bin/bash
-
-__tb_add_to_path_cache_path() {
-  printf '%s/core/__tb_add_to_path.cache\n' "$TBDIR"
-}
-
-__tb_add_to_path_trim_line() {
-  local line="$1"
-
-  line="${line//$'\r'/}"
-  line="${line#"${line%%[![:space:]]*}"}"
-  line="${line%"${line##*[![:space:]]}"}"
-
-  printf '%s\n' "$line"
-}
-
-__tb_add_to_path_normalize_command_name() {
-  local command_name
-
-  command_name="$(__tb_add_to_path_trim_line "$1")"
-  command_name="$(printf '%s' "$command_name" | tr '[:upper:]' '[:lower:]')"
-
-  printf '%s\n' "$command_name"
-}
-
-__tb_add_to_path_find_first_valid_path() {
-  local command_name="$1"
-  local output=""
-  local raw_line=""
-  local trimmed_line=""
-
-  output="$(winwhere "$command_name" 2>&1)"
-
-  while IFS= read -r raw_line; do
-    trimmed_line="$(__tb_add_to_path_trim_line "$raw_line")"
-
-    if [ -z "$trimmed_line" ]; then
+    if [ -z "$shim_target" ]; then
+      __tb_windows_shim_delete_managed_file "$command_name"
       continue
     fi
 
-    if [ -e "$trimmed_line" ]; then
-      printf '%s\n' "$trimmed_line"
-      return 0
-    fi
-  done <<< "$output"
-
-  return 1
-}
-
-__tb_windows_command_exists() {
-  __tb_add_to_path_find_first_valid_path "$1" >/dev/null 2>&1
-}
-
-__tb_windows_alias_target_name() {
-  local command_name="$1"
-  local suffix=""
-  local candidate=""
-
-  for suffix in exe bat cmd; do
-    candidate="${command_name}.${suffix}"
-
-    if command -v "$candidate" >/dev/null 2>&1; then
-      printf '%s\n' "$candidate"
-      return 0
-    fi
+    __tb_windows_shim_write_file "$command_name" "$shim_target" || return 1
+    printf '%s\n' "$command_name" >> "$temporary_path" || return 1
   done
 
-  return 1
+  mv "$temporary_path" "$manifest_path"
 }
 
-__tb_add_to_path_lookup_command() {
-  local command_name="$1"
-  local resolved_path=""
-  local directory_path=""
+__tb_windows_path_cache_loaded="0"
+__tb_windows_cached_path=""
 
-  if resolved_path="$(__tb_add_to_path_find_first_valid_path "$command_name")"; then
-    directory_path="${resolved_path%/*}"
-    printf 'found\t%s\t%s\n' "$resolved_path" "$directory_path"
-    return 0
-  fi
-
-  printf 'no path found\t\t\n'
-  return 1
-}
-
-__tb_add_to_path_cache_loaded="0"
-__tb_add_to_path_cache_rows=""
-__tb_add_to_path_cached_directories=""
-
-__tb_add_to_path_load_cache() {
+__tb_windows_path_load_cache() {
   local cache_path=""
   local first_line=""
 
-  if [ "${__tb_add_to_path_cache_loaded:-0}" = "1" ]; then
+  if [ "${__tb_windows_path_cache_loaded:-0}" = "1" ]; then
     return 0
   fi
 
-  cache_path="$(__tb_add_to_path_cache_path)"
-  __tb_add_to_path_cache_rows=""
-  __tb_add_to_path_cached_directories=""
-  __tb_add_to_path_cache_loaded="1"
+  __tb_windows_path_cache_loaded="1"
+  __tb_windows_cached_path=""
+  cache_path="$(__tb_windows_path_cache_path)"
 
   if [ ! -f "$cache_path" ]; then
     return 0
@@ -592,291 +243,161 @@ __tb_add_to_path_load_cache() {
   IFS= read -r first_line < "$cache_path" || return 0
 
   case "$first_line" in
-    __tb_add_to_path_cached_directories=*|__tb_add_to_path_cache_rows=*) ;;
+    __tb_windows_cached_path=*) source "$cache_path" ;;
     *) return 0 ;;
   esac
-
-  source "$cache_path"
 }
 
-__tb_add_to_path_build_cached_directories() {
-  local row=""
-  local row_status=""
-  local row_directory=""
-  local directories=""
-  local -a unique_directories=()
+__tb_windows_path_collect_windows_entries() {
+  local windows_path=""
+  local remaining=""
+  local entry=""
+  local converted_entry=""
+  local -a entries=()
 
-  __tb_add_to_path_load_cache
+  windows_path="$(cmd.exe /d /c echo %PATH% 2>/dev/null | tr -d '\r')"
+  remaining="$windows_path"
 
-  if [ -z "$__tb_add_to_path_cache_rows" ]; then
-    return 0
-  fi
-
-  while IFS= read -r row || [ -n "$row" ]; do
-    IFS=$'\t' read -r _ row_status _ row_directory <<< "$row"
-
-    if [ "$row_status" != "found" ] || [ -z "$row_directory" ]; then
-      continue
-    fi
-
-    if ! __tb_add_to_path_array_contains "$row_directory" "${unique_directories[@]}"; then
-      unique_directories+=("$row_directory")
-    fi
-  done <<< "$__tb_add_to_path_cache_rows"
-
-  if [ "${#unique_directories[@]}" -eq 0 ]; then
-    return 0
-  fi
-
-  for row_directory in "${unique_directories[@]}"; do
-    if [ -n "$directories" ]; then
-      directories+=":"
-    fi
-
-    directories+="$row_directory"
-  done
-
-  printf '%s\n' "$directories"
-}
-
-__tb_add_to_path_apply_cached_directories() {
-  local cached_directories=""
-  local directory_path=""
-
-  __tb_add_to_path_load_cache
-  cached_directories="$__tb_add_to_path_cached_directories"
-
-  if [ -z "$cached_directories" ]; then
-    return 1
-  fi
-
-  while [ -n "$cached_directories" ]; do
-    case "$cached_directories" in
-      *:*)
-        directory_path="${cached_directories%%:*}"
-        cached_directories="${cached_directories#*:}"
+  while [ -n "$remaining" ]; do
+    case "$remaining" in
+      *';'*)
+        entry="${remaining%%;*}"
+        remaining="${remaining#*;}"
         ;;
       *)
-        directory_path="$cached_directories"
-        cached_directories=""
+        entry="$remaining"
+        remaining=""
         ;;
     esac
 
-    __tb_add_to_path_add_directory "$directory_path"
+    entry="$(__tb_add_to_path_trim_line "$entry")"
+    [ -n "$entry" ] || continue
+
+    converted_entry="$(udir "$entry")"
+    [ -d "$converted_entry" ] || continue
+
+    if ! __tb_add_to_path_array_contains "$converted_entry" "${entries[@]}"; then
+      entries+=("$converted_entry")
+    fi
   done
 
-  return 0
+  if [ "${#entries[@]}" -gt 0 ]; then
+    printf '%s\n' "${entries[@]}"
+  fi
 }
 
-__tb_add_to_path_get_cache_row() {
-  local command_name="$1"
-  local row=""
-  local row_command=""
-  local row_status=""
-  local row_path=""
-  local row_directory=""
+__tb_windows_path_build_merged_path() {
+  local current_path="$PATH"
+  local remaining=""
+  local entry=""
+  local line=""
+  local merged_path=""
+  local -a entries=()
 
-  __tb_add_to_path_cache_status=""
-  __tb_add_to_path_cache_resolved_path=""
-  __tb_add_to_path_cache_directory=""
+  remaining="$current_path"
 
-  __tb_add_to_path_load_cache
+  while [ -n "$remaining" ]; do
+    case "$remaining" in
+      *:*)
+        entry="${remaining%%:*}"
+        remaining="${remaining#*:}"
+        ;;
+      *)
+        entry="$remaining"
+        remaining=""
+        ;;
+    esac
 
-  if [ -z "$__tb_add_to_path_cache_rows" ]; then
-    return 1
-  fi
+    [ -n "$entry" ] || continue
 
-  while IFS= read -r row || [ -n "$row" ]; do
-    IFS=$'\t' read -r row_command row_status row_path row_directory <<< "$row"
-
-    if [ "$row_command" != "$command_name" ]; then
-      continue
+    if ! __tb_add_to_path_array_contains "$entry" "${entries[@]}"; then
+      entries+=("$entry")
     fi
+  done
 
-    __tb_add_to_path_cache_status="$row_status"
-    __tb_add_to_path_cache_resolved_path="$row_path"
-    __tb_add_to_path_cache_directory="$row_directory"
-    return 0
-  done <<< "$__tb_add_to_path_cache_rows"
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
 
-  return 1
-}
-
-__tb_add_to_path_set_cache_row() {
-  local command_name="$1"
-  local cache_status="$2"
-  local resolved_path="$3"
-  local directory_path="$4"
-  local row=""
-  local row_command=""
-  local new_rows=""
-  local replacement_row=""
-  local replaced="0"
-
-  __tb_add_to_path_load_cache
-
-  replacement_row="${command_name}"$'\t'"${cache_status}"$'\t'"${resolved_path}"$'\t'"${directory_path}"
-
-  if [ -n "$__tb_add_to_path_cache_rows" ]; then
-    while IFS= read -r row || [ -n "$row" ]; do
-      IFS=$'\t' read -r row_command _ <<< "$row"
-
-      if [ "$row_command" = "$command_name" ]; then
-        row="$replacement_row"
-        replaced="1"
-      fi
-
-      if [ -n "$new_rows" ]; then
-        new_rows+=$'\n'
-      fi
-
-      new_rows+="$row"
-    done <<< "$__tb_add_to_path_cache_rows"
-  fi
-
-  if [ "$replaced" != "1" ]; then
-    if [ -n "$new_rows" ]; then
-      new_rows+=$'\n'
+    if ! __tb_add_to_path_array_contains "$line" "${entries[@]}"; then
+      entries+=("$line")
     fi
+  done < <(__tb_windows_path_collect_windows_entries)
 
-    new_rows+="$replacement_row"
-  fi
+  for entry in "${entries[@]}"; do
+    merged_path+="${merged_path:+:}${entry}"
+  done
 
-  __tb_add_to_path_cache_rows="$new_rows"
+  printf '%s\n' "$merged_path"
 }
 
-__tb_add_to_path_cache_command_names() {
-  local row=""
-  local row_command=""
+__tb_windows_path_apply_startup_cache() {
+  local startup_cache=""
 
-  __tb_add_to_path_load_cache
+  startup_cache="$(__tb_windows_path_startup_cache_path)"
+  [ -f "$startup_cache" ] || return 1
 
-  if [ -z "$__tb_add_to_path_cache_rows" ]; then
-    return 0
-  fi
-
-  while IFS= read -r row || [ -n "$row" ]; do
-    IFS=$'\t' read -r row_command _ <<< "$row"
-
-    if [ -n "$row_command" ]; then
-      printf '%s\n' "$row_command"
-    fi
-  done <<< "$__tb_add_to_path_cache_rows"
+  source "$startup_cache"
 }
 
-__tb_add_to_path_write_cache() {
+__tb_windows_path_write_cache() {
   local cache_path=""
   local temporary_path=""
-  local cached_directories=""
 
-  __tb_add_to_path_load_cache
-  cache_path="$(__tb_add_to_path_cache_path)"
+  cache_path="$(__tb_windows_path_cache_path)"
   temporary_path="${cache_path}.tmp.$$"
-  cached_directories="$(__tb_add_to_path_build_cached_directories)"
-  __tb_add_to_path_cached_directories="$cached_directories"
 
-  {
-    printf '__tb_add_to_path_cached_directories=%q\n' "$cached_directories"
-    printf '__tb_add_to_path_cache_rows=%q\n' "$__tb_add_to_path_cache_rows"
-  } > "$temporary_path" || return 1
-
+  printf '__tb_windows_cached_path=%q\n' "$__tb_windows_cached_path" > "$temporary_path" || return 1
   mv "$temporary_path" "$cache_path"
 }
 
-__tb_add_to_path_array_contains() {
-  local needle="$1"
-  shift
-  local value=""
+__tb_windows_path_write_startup_cache() {
+  local startup_cache=""
+  local temporary_path=""
 
-  for value in "$@"; do
-    if [ "$value" = "$needle" ]; then
-      return 0
+  __tb_windows_path_load_cache
+  startup_cache="$(__tb_windows_path_startup_cache_path)"
+  temporary_path="${startup_cache}.tmp.$$"
+
+  {
+    printf '#!/bin/bash\n'
+
+    if [ -n "$__tb_windows_cached_path" ]; then
+      printf 'export PATH=%q\n' "$__tb_windows_cached_path"
     fi
-  done
+  } > "$temporary_path" || return 1
 
-  return 1
+  mv "$temporary_path" "$startup_cache"
 }
 
-__tb_add_to_path_add_directory() {
-  local directory_path="$1"
+__tb_windows_path_refresh_cache() {
+  __tb_windows_cached_path="$(__tb_windows_path_build_merged_path)"
 
-  if [ -z "$directory_path" ] || [ ! -d "$directory_path" ]; then
-    return 0
+  if [ -z "$__tb_windows_cached_path" ]; then
+    return 1
   fi
 
-  if [[ ":$PATH:" == *":$directory_path:"* ]]; then
-    return 0
-  fi
-
-  export PATH="$directory_path:$PATH"
-}
-
-__tb_add_to_path_from_file() {
-  local refresh_cache="0"
-  local command_file=""
-  local line=""
-  local command_name=""
-  local -a commands=()
-
-  if [ "$1" = "--refresh" ]; then
-    refresh_cache="1"
-    shift
-  fi
-
-  command_file="$1"
-
-  if [ ! -f "$command_file" ]; then
-    return 0
-  fi
-
-  while IFS= read -r line || [ -n "$line" ]; do
-    command_name="$(__tb_add_to_path_normalize_command_name "$line")"
-
-    case "$command_name" in
-      ''|'#'*) continue ;;
-    esac
-
-    if ! __tb_add_to_path_array_contains "$command_name" "${commands[@]}"; then
-      commands+=("$command_name")
-    fi
-  done < "$command_file"
-
-  if [ "${#commands[@]}" -gt 0 ]; then
-    if [ "$refresh_cache" = "1" ]; then
-      __tb_add_to_path --refresh "${commands[@]}"
-    else
-      __tb_add_to_path "${commands[@]}"
-    fi
-  fi
+  __tb_windows_path_write_cache || return 1
+  __tb_windows_path_write_startup_cache || return 1
+  __tb_windows_shim_refresh || return 1
+  return 0
 }
 
 __tb_add_to_path_print_help() {
   cat <<'EOF'
-Usage: __tb_add_to_path [options] <command> [command ...]
+Usage: __tb_add_to_path [options]
 
 Options:
-  -r, --refresh  Refresh the full command cache before adding paths.
-  -help, --help  Show this help message.
-
-Each command should be passed as its own argument.
+  -r, --refresh-cache  Refresh the full Windows PATH cache.
+  -help, --help        Show this help message.
 EOF
 }
 
 __tb_add_to_path() {
   local refresh_cache="0"
-  local cache_changed="0"
-  local command_name=""
-  local lookup_result=""
-  local cache_status=""
-  local resolved_path=""
-  local directory_path=""
-  local line=""
-  local -a requested_commands=()
-  local -a commands_to_refresh=()
 
   while [ "$#" -gt 0 ]; do
     case "$1" in
-      -r|--refresh)
+      -r|--refresh-cache)
         refresh_cache="1"
         ;;
       -help|--help)
@@ -884,17 +405,6 @@ __tb_add_to_path() {
         return 0
         ;;
       --)
-        shift
-        while [ "$#" -gt 0 ]; do
-          command_name="$(__tb_add_to_path_normalize_command_name "$1")"
-
-          if [ -n "$command_name" ] && ! __tb_add_to_path_array_contains "$command_name" "${requested_commands[@]}"; then
-            requested_commands+=("$command_name")
-          fi
-
-          shift
-        done
-        break
         ;;
       -*)
         printf 'Unknown option: %s\n' "$1" >&2
@@ -902,59 +412,20 @@ __tb_add_to_path() {
         return 1
         ;;
       *)
-        command_name="$(__tb_add_to_path_normalize_command_name "$1")"
-
-        if [ -n "$command_name" ] && ! __tb_add_to_path_array_contains "$command_name" "${requested_commands[@]}"; then
-          requested_commands+=("$command_name")
-        fi
+        printf 'Unknown argument: %s\n' "$1" >&2
+        __tb_add_to_path_print_help >&2
+        return 1
         ;;
     esac
 
     shift
   done
 
-  __tb_add_to_path_load_cache
+  __tb_windows_path_load_cache
 
-  if [ "$refresh_cache" = "1" ]; then
-    while IFS= read -r line; do
-      if [ -n "$line" ] && ! __tb_add_to_path_array_contains "$line" "${commands_to_refresh[@]}"; then
-        commands_to_refresh+=("$line")
-      fi
-    done < <(__tb_add_to_path_cache_command_names)
-
-    for command_name in "${requested_commands[@]}"; do
-      if ! __tb_add_to_path_array_contains "$command_name" "${commands_to_refresh[@]}"; then
-        commands_to_refresh+=("$command_name")
-      fi
-    done
-
-    for command_name in "${commands_to_refresh[@]}"; do
-      lookup_result="$(__tb_add_to_path_lookup_command "$command_name")"
-      IFS=$'\t' read -r cache_status resolved_path directory_path <<< "$lookup_result"
-      __tb_add_to_path_set_cache_row "$command_name" "$cache_status" "$resolved_path" "$directory_path"
-
-      cache_changed="1"
-    done
+  if [ "$refresh_cache" = "1" ] || [ -z "$__tb_windows_cached_path" ] || [ ! -f "$(__tb_windows_path_startup_cache_path)" ]; then
+    __tb_windows_path_refresh_cache || return 1
   fi
 
-  for command_name in "${requested_commands[@]}"; do
-    if [ "$refresh_cache" != "1" ] && __tb_add_to_path_get_cache_row "$command_name"; then
-      cache_status="$__tb_add_to_path_cache_status"
-      resolved_path="$__tb_add_to_path_cache_resolved_path"
-      directory_path="$__tb_add_to_path_cache_directory"
-    else
-      lookup_result="$(__tb_add_to_path_lookup_command "$command_name")"
-      IFS=$'\t' read -r cache_status resolved_path directory_path <<< "$lookup_result"
-      __tb_add_to_path_set_cache_row "$command_name" "$cache_status" "$resolved_path" "$directory_path"
-      cache_changed="1"
-    fi
-
-    if [ "$cache_status" = "found" ]; then
-      __tb_add_to_path_add_directory "$directory_path"
-    fi
-  done
-
-  if [ "$cache_changed" = "1" ]; then
-    __tb_add_to_path_write_cache || return 1
-  fi
+  __tb_windows_path_apply_startup_cache >/dev/null 2>&1 || true
 }
