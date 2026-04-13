@@ -1,0 +1,17 @@
+#!/bin/bash
+
+there_validate_wrapper_file() {
+    local wrapper_path="$1"
+
+    if [[ ! -f "$wrapper_path" ]]; then
+        printf 'Error: First result is not a file: %s\n' "$wrapper_path" >&2
+        return 3
+    fi
+
+    if [[ ! -r "$wrapper_path" ]]; then
+        printf 'Error: Wrapper file is not readable: %s\n' "$wrapper_path" >&2
+        return 4
+    fi
+
+    return 0
+}

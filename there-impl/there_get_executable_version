@@ -1,0 +1,23 @@
+#!/bin/bash
+
+there_get_executable_version() {
+    local resolved_path="$1"
+    local lowercase_path
+
+    lowercase_path="$(printf '%s\n' "$resolved_path" | tr '[:upper:]' '[:lower:]')"
+
+    case "$lowercase_path" in
+        */bin/release/*/publish/*)
+            printf '%s\n' 'Published'
+            ;;
+        */bin/release/*)
+            printf '%s\n' 'Release'
+            ;;
+        */bin/debug/*)
+            printf '%s\n' 'Debug'
+            ;;
+        *)
+            printf '%s\n' 'Unknown'
+            ;;
+    esac
+}

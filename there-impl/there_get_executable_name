@@ -1,0 +1,9 @@
+#!/bin/bash
+
+there_get_executable_name() {
+    local resolved_path="$1"
+    local executable_name
+
+    executable_name="${resolved_path##*/}"
+    printf '%s\n' "${executable_name%.*}"
+}

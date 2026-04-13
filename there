@@ -1,0 +1,89 @@
+#!/bin/bash
+
+there() {
+    local output_mode="summary"
+    local tool_name=""
+    local resolved_path
+    local executable_name
+    local executable_version
+
+    while (( $# > 0 )); do
+        case "$1" in
+            --path)
+                if [[ "$output_mode" != "summary" ]]; then
+                    printf '%s\n' 'Error: Use only one of --name, --path, or --version.' >&2
+                    return 1
+                fi
+
+                output_mode="path"
+                ;;
+            --name)
+                if [[ "$output_mode" != "summary" ]]; then
+                    printf '%s\n' 'Error: Use only one of --name, --path, or --version.' >&2
+                    return 1
+                fi
+
+                output_mode="name"
+                ;;
+            --version)
+                if [[ "$output_mode" != "summary" ]]; then
+                    printf '%s\n' 'Error: Use only one of --name, --path, or --version.' >&2
+                    return 1
+                fi
+
+                output_mode="version"
+                ;;
+            --help|-h)
+                printf '%s\n' 'Usage: there [--name|--path|--version] <tool-name>'
+                return 0
+                ;;
+            --*)
+                printf 'Error: Unknown option "%s".\n' "$1" >&2
+                printf '%s\n' 'Usage: there [--name|--path|--version] <tool-name>' >&2
+                return 1
+                ;;
+            *)
+                if [[ -n "$tool_name" ]]; then
+                    printf 'Error: Too many arguments.\n' >&2
+                    printf '%s\n' 'Usage: there [--name|--path|--version] <tool-name>' >&2
+                    return 1
+                fi
+
+                tool_name="$1"
+                ;;
+        esac
+
+        shift
+    done
+
+    if [[ -z "$tool_name" ]]; then
+        printf '%s\n' 'Error: No tool name provided.' >&2
+        printf '%s\n' 'Usage: there [--name|--path|--version] <tool-name>' >&2
+        return 1
+    fi
+
+    resolved_path="$(there_resolve_tool_executable_path "$tool_name")" || return $?
+    executable_name="$(there_get_executable_name "$resolved_path")"
+    executable_version="$(there_get_executable_version "$resolved_path")"
+
+    case "$output_mode" in
+        path)
+            printf '%s\n' "$resolved_path"
+            ;;
+        name)
+            printf '%s\n' "$executable_name"
+            ;;
+        version)
+            printf '%s\n' "$executable_version"
+            ;;
+        summary)
+            printf 'name: %s\n' "$executable_name"
+            printf 'path: %s\n' "$resolved_path"
+            printf 'version: %s\n' "$executable_version"
+            ;;
+    esac
+
+    return 0
+}
+
+_create_command_wrapper_for_function "there"
