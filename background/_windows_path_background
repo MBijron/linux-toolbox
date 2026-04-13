@@ -29,6 +29,28 @@ windows_path_background_is_running() {
     return 1
 }
 
+windows_path_background_stop_duplicates() {
+    local keep_pid="${1:-}"
+    local duplicate_pid
+    local current_user_id
+
+    if ! command -v pgrep >/dev/null 2>&1; then
+        return 0
+    fi
+
+    current_user_id="$(id -u)"
+
+    while IFS= read -r duplicate_pid; do
+        [[ -n "$duplicate_pid" ]] || continue
+
+        if [[ -n "$keep_pid" && "$duplicate_pid" = "$keep_pid" ]]; then
+            continue
+        fi
+
+        kill "$duplicate_pid" 2>/dev/null || true
+    done < <(pgrep -u "$current_user_id" -f 'windows_path_background_run_service' 2>/dev/null || true)
+}
+
 windows_path_background_run_service() {
     local poll_interval_seconds="${WINDOWS_PATH_BACKGROUND_POLL_INTERVAL:-600}"
 
@@ -42,10 +64,15 @@ windows_path_background_start() {
     local pid_path
     local shell_path
     local background_pid
+    local running_pid
 
     if windows_path_background_is_running; then
+        running_pid="$(cat "$(windows_path_background_pid_path)" 2>/dev/null || true)"
+        windows_path_background_stop_duplicates "$running_pid"
         return 0
     fi
+
+    windows_path_background_stop_duplicates
 
     pid_path="$(windows_path_background_pid_path)"
     shell_path="$(command -v bash)"

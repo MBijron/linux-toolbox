@@ -77,17 +77,55 @@ __tb_windows_command_exists() {
   __tb_add_to_path_find_first_valid_path "$1" >/dev/null 2>&1
 }
 
+__tb_windows_path_without_toolbox_bin() {
+  local path_value="$1"
+  local toolbox_bin="$TBDIR/bin"
+  local remaining=""
+  local entry=""
+  local filtered_path=""
+
+  remaining="$path_value"
+
+  while [ -n "$remaining" ]; do
+    case "$remaining" in
+      *:*)
+        entry="${remaining%%:*}"
+        remaining="${remaining#*:}"
+        ;;
+      *)
+        entry="$remaining"
+        remaining=""
+        ;;
+    esac
+
+    if [ -z "$entry" ] || [ "$entry" = "$toolbox_bin" ]; then
+      continue
+    fi
+
+    filtered_path+="${filtered_path:+:}${entry}"
+  done
+
+  printf '%s\n' "$filtered_path"
+}
+
 __tb_windows_shim_target_name() {
   local command_name="$1"
   local path_value="${2:-${__tb_windows_cached_path:-$PATH}}"
+  local lookup_path=""
   local suffix=""
   local candidate=""
+  local resolved_target=""
+
+  lookup_path="$(__tb_windows_path_without_toolbox_bin "$path_value")"
 
   for suffix in exe bat cmd; do
     candidate="${command_name}.${suffix}"
 
-    if PATH="$path_value" command -v "$candidate" >/dev/null 2>&1; then
-      printf '%s\n' "$candidate"
+    resolved_target="$(PATH="$lookup_path" command -v "$candidate" 2>/dev/null)"
+    resolved_target="$(__tb_add_to_path_trim_line "$resolved_target")"
+
+    if [ -n "$resolved_target" ]; then
+      printf '%s\n' "$resolved_target"
       return 0
     fi
   done
@@ -137,19 +175,32 @@ __tb_windows_shim_delete_managed_file() {
   fi
 }
 
-__tb_windows_shim_write_file() {
+__tb_windows_shim_delete_managed_variants() {
   local command_name="$1"
+  local managed_name=""
+
+  for managed_name in "$command_name" "$command_name.exe" "$command_name.cmd" "$command_name.bat"; do
+    __tb_windows_shim_delete_managed_file "$managed_name"
+  done
+}
+
+__tb_windows_shim_write_file() {
+  local shim_name="$1"
   local shim_target="$2"
-  local shim_path="$TBDIR/bin/$command_name"
+  local shim_path="$TBDIR/bin/$shim_name"
   local temporary_path="${shim_path}.tmp.$$"
 
   {
     printf '#!/bin/bash\n'
     printf '# toolbox-windows-shim\n'
     printf 'target=%q\n' "$shim_target"
+    printf 'target_command="$target"\n'
     printf 'converted_args=()\n'
     printf 'arg=""\n'
     printf 'converted_arg=""\n'
+    printf 'if [ -e "$target" ]; then\n'
+    printf '  target_command="$(wslpath -w "$target" 2>/dev/null || printf %%s "$target")"\n'
+    printf 'fi\n'
     printf 'for arg in "$@"; do\n'
     printf '  if [ -e "$arg" ]; then\n'
     printf '    converted_arg="$(wslpath -w "$arg" 2>/dev/null || printf %%s "$arg")"\n'
@@ -159,13 +210,139 @@ __tb_windows_shim_write_file() {
     printf '  converted_args+=("$converted_arg")\n'
     printf 'done\n'
     printf 'case "$target" in\n'
-    printf '  *.cmd|*.bat) exec cmd.exe /d /c "$target" "${converted_args[@]}" ;;\n'
+    printf '  *.cmd|*.bat) exec cmd.exe /d /c "$target_command" "${converted_args[@]}" ;;\n'
     printf '  *) exec "$target" "${converted_args[@]}" ;;\n'
     printf 'esac\n'
   } > "$temporary_path" || return 1
 
   chmod +x "$temporary_path" || return 1
   mv "$temporary_path" "$shim_path"
+}
+
+__tb_windows_shim_write_variants() {
+  local command_name="$1"
+  local shim_target="$2"
+  local extension=""
+
+  __tb_windows_shim_delete_managed_variants "$command_name"
+  __tb_windows_shim_write_file "$command_name" "$shim_target" || return 1
+
+  case "$shim_target" in
+    *.exe) extension='exe' ;;
+    *.cmd) extension='cmd' ;;
+    *.bat) extension='bat' ;;
+  esac
+
+  if [ -n "$extension" ]; then
+    __tb_windows_shim_write_file "$command_name.$extension" "$shim_target" || return 1
+  fi
+}
+
+__tb_windows_sudo_wrapper_path() {
+  printf '%s/bin/sudo\n' "$TBDIR"
+}
+
+__tb_windows_write_sudo_wrapper() {
+  local wrapper_path=""
+  local temporary_path=""
+
+  wrapper_path="$(__tb_windows_sudo_wrapper_path)"
+  temporary_path="${wrapper_path}.tmp.$$"
+
+  {
+    printf '#!/bin/bash\n'
+    printf '# toolbox-sudo-wrapper-v3\n'
+    printf 'real_sudo=/usr/bin/sudo\n'
+    printf 'real_shell=/usr/bin/zsh\n'
+    printf 'toolbox_dir=%q\n' "$TBDIR"
+    printf 'toolbox_path="$PATH"\n'
+    printf 'sudo_args=()\n'
+    printf 'env_args=()\n'
+    printf 'command_args=()\n'
+    printf 'arg=""\n'
+    printf 'expect_value=0\n'
+    printf 'passthrough_mode=0\n'
+    printf 'command_seen=0\n'
+    printf 'if [ ! -x "$real_sudo" ]; then\n'
+    printf '  printf "sudo executable not found at %%s\\n" "$real_sudo" >&2\n'
+    printf '  exit 1\n'
+    printf 'fi\n'
+    printf 'if [ ! -x "$real_shell" ]; then\n'
+    printf '  real_shell="$(command -v zsh 2>/dev/null || true)"\n'
+    printf 'fi\n'
+    printf 'if [ -z "$real_shell" ] || [ ! -x "$real_shell" ]; then\n'
+    printf '  printf "zsh executable not found for sudo toolbox bootstrap\\n" >&2\n'
+    printf '  exit 1\n'
+    printf 'fi\n'
+    printf 'for arg in "$@"; do\n'
+    printf '  if [ "$command_seen" = 1 ]; then\n'
+    printf '    command_args+=("$arg")\n'
+    printf '    continue\n'
+    printf '  fi\n'
+    printf '  if [ "$expect_value" = 1 ]; then\n'
+    printf '    sudo_args+=("$arg")\n'
+    printf '    expect_value=0\n'
+    printf '    continue\n'
+    printf '  fi\n'
+    printf '  case "$arg" in\n'
+    printf '    --)\n'
+    printf '      sudo_args+=("$arg")\n'
+    printf '      command_seen=1\n'
+    printf '      ;;\n'
+    printf '    -e|--edit|-i|--login|-s|--shell|-l|--list|-v|--validate|-V|--version|-h|--help|-k|--reset-timestamp|-K|--remove-timestamp)\n'
+    printf '      passthrough_mode=1\n'
+    printf '      sudo_args+=("$arg")\n'
+    printf '      ;;\n'
+    printf '    -u|-g|-p|-C|-T|-r|-t|-R|-D)\n'
+    printf '      sudo_args+=("$arg")\n'
+    printf '      expect_value=1\n'
+    printf '      ;;\n'
+    printf '    --user=*|--group=*|--host=*|--prompt=*|--close-from=*|--command-timeout=*|--role=*|--type=*|--chroot=*|--chdir=*)\n'
+    printf '      sudo_args+=("$arg")\n'
+    printf '      ;;\n'
+    printf '    --user|--group|--host|--prompt|--close-from|--command-timeout|--role|--type|--chroot|--chdir)\n'
+    printf '      sudo_args+=("$arg")\n'
+    printf '      expect_value=1\n'
+    printf '      ;;\n'
+    printf '    -*)\n'
+    printf '      sudo_args+=("$arg")\n'
+    printf '      ;;\n'
+    printf '    [A-Za-z_][A-Za-z0-9_]*=*)\n'
+    printf '      env_args+=("$arg")\n'
+    printf '      ;;\n'
+    printf '    *)\n'
+    printf '      command_seen=1\n'
+    printf '      command_args+=("$arg")\n'
+    printf '      ;;\n'
+    printf '  esac\n'
+    printf 'done\n'
+    printf 'if [ "$passthrough_mode" = 1 ] || [ "$expect_value" = 1 ] || [ "${#command_args[@]}" -eq 0 ]; then\n'
+    printf '  exec "$real_sudo" "$@"\n'
+    printf 'fi\n'
+    printf 'exec "$real_sudo" "${sudo_args[@]}" env "PATH=$toolbox_path" "TBDIR=$toolbox_dir" "TOOLBOX_SKIP_BACKGROUND_INIT=1" "${env_args[@]}" "$real_shell" -lc '\''source "$TBDIR/tbr" >/dev/null 2>&1 || exit 1; tbr >/dev/null 2>&1 || true; "$@"'\'' zsh "${command_args[@]}"\n'
+  } > "$temporary_path" || return 1
+
+  chmod +x "$temporary_path" || return 1
+  mv "$temporary_path" "$wrapper_path"
+}
+
+__tb_windows_ensure_sudo_wrapper() {
+  local wrapper_path=""
+  local first_line=""
+  local second_line=""
+
+  wrapper_path="$(__tb_windows_sudo_wrapper_path)"
+
+  if [ -f "$wrapper_path" ]; then
+    IFS= read -r first_line < "$wrapper_path" || true
+    IFS= read -r second_line < <(sed -n '2p' "$wrapper_path") || true
+
+    if [ "$first_line" = '#!/bin/bash' ] && [ "$second_line" = '# toolbox-sudo-wrapper-v3' ]; then
+      return 0
+    fi
+  fi
+
+  __tb_windows_write_sudo_wrapper
 }
 
 __tb_windows_shim_refresh() {
@@ -181,6 +358,7 @@ __tb_windows_shim_refresh() {
   temporary_path="${manifest_path}.tmp.$$"
   rm -f "$TBDIR/links/include_windows_aliasses" "$TBDIR/links/include_windows_aliasses.txt"
   mkdir -p "$TBDIR/bin"
+  __tb_windows_ensure_sudo_wrapper || return 1
 
   if [ -f "$manifest_path" ]; then
     while IFS= read -r line || [ -n "$line" ]; do
@@ -200,7 +378,7 @@ __tb_windows_shim_refresh() {
 
   for command_name in "${previous_commands[@]}"; do
     if ! __tb_add_to_path_array_contains "$command_name" "${tracked_commands[@]}"; then
-      __tb_windows_shim_delete_managed_file "$command_name"
+      __tb_windows_shim_delete_managed_variants "$command_name"
     fi
   done
 
@@ -210,11 +388,11 @@ __tb_windows_shim_refresh() {
     shim_target="$(__tb_windows_shim_target_name "$command_name" "$__tb_windows_cached_path")"
 
     if [ -z "$shim_target" ]; then
-      __tb_windows_shim_delete_managed_file "$command_name"
+      __tb_windows_shim_delete_managed_variants "$command_name"
       continue
     fi
 
-    __tb_windows_shim_write_file "$command_name" "$shim_target" || return 1
+    __tb_windows_shim_write_variants "$command_name" "$shim_target" || return 1
     printf '%s\n' "$command_name" >> "$temporary_path" || return 1
   done
 
@@ -333,6 +511,7 @@ __tb_windows_path_build_merged_path() {
 __tb_windows_path_apply_startup_cache() {
   local startup_cache=""
 
+  __tb_windows_ensure_sudo_wrapper || return 1
   startup_cache="$(__tb_windows_path_startup_cache_path)"
   [ -f "$startup_cache" ] || return 1
 
