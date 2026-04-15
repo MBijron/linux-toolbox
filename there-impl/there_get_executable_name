@@ -5,5 +5,7 @@ there_get_executable_name() {
     local executable_name
 
     executable_name="${resolved_path##*/}"
+    executable_name="${executable_name##*\\}"
+    executable_name="${executable_name%$'\r'}"
     printf '%s\n' "${executable_name%.*}"
 }

@@ -1,0 +1,51 @@
+#!/bin/bash
+
+tpub_run_quick_publish() {
+    local force_requested="0"
+    local argument=""
+    local resolved_name=""
+    local target_list=""
+    local -a requested_tools=()
+    local -a rebuild_targets=()
+    local -a tbi_arguments=("quick")
+
+    for argument in "$@"; do
+        case "$argument" in
+            -h|--help|-help)
+                printf '%s\n' 'Usage: tpub [-force] [tool ...]'
+                return 0
+                ;;
+            -force)
+                force_requested="1"
+                ;;
+            *)
+                if [ -z "$argument" ]; then
+                    printf '%s\n' 'Error: tool name cannot be empty.' >&2
+                    printf '%s\n' 'Usage: tpub [-force] [tool ...]' >&2
+                    return 1
+                fi
+
+                requested_tools+=("$argument")
+                ;;
+        esac
+    done
+
+    if [ "$force_requested" = "1" ]; then
+        tbi_arguments+=("-force")
+    fi
+
+    if [ "${#requested_tools[@]}" -eq 0 ] && [ "${#rebuild_targets[@]}" -eq 0 ]; then
+        tbi "${tbi_arguments[@]}"
+        return $?
+    fi
+
+    for argument in "${requested_tools[@]}"; do
+        resolved_name="$(tpub_resolve_rebuild_target "$argument")" || return $?
+        rebuild_targets+=("$resolved_name")
+    done
+
+    target_list="$(tpub_join_target_list "${rebuild_targets[@]}")"
+    tbi_arguments+=("--target" "$target_list")
+
+    tbi "${tbi_arguments[@]}"
+}

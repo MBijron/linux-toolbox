@@ -1,0 +1,31 @@
+#!/bin/bash
+
+tpub_resolve_rebuild_target() {
+    local requested_tool="$1"
+    local there_output=""
+    local there_status=0
+    local error_file=""
+    local error_output=""
+
+    error_file="$(mktemp)" || return 1
+    there_output="$(there --path "$requested_tool" 2>"$error_file")"
+    there_status=$?
+    error_output="$(cat "$error_file")"
+    rm -f "$error_file"
+
+    case "$there_status" in
+        0)
+            there_get_executable_name "$there_output"
+            ;;
+        1|2|3|6|7)
+            printf '%s\n' "$requested_tool"
+            ;;
+        *)
+            if [ -n "$error_output" ]; then
+                printf '%s\n' "$error_output" >&2
+            fi
+
+            return "$there_status"
+            ;;
+    esac
+}

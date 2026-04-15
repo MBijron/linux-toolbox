@@ -1,0 +1,16 @@
+#!/bin/bash
+
+tpub_join_target_list() {
+    local target=""
+    local joined_targets=""
+
+    for target in "$@"; do
+        if [ -z "$joined_targets" ]; then
+            joined_targets="$target"
+        else
+            joined_targets="${joined_targets},${target}"
+        fi
+    done
+
+    printf '%s\n' "$joined_targets"
+}
