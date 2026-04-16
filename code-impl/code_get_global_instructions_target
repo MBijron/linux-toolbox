@@ -1,0 +1,5 @@
+#!/bin/bash
+
+code_get_global_instructions_target() {
+    printf '%s' 'C:\Users\mauricebijron\AppData\Roaming\Code - Insiders\User\prompts\global.instructions.md'
+}

@@ -1,0 +1,14 @@
+#!/bin/bash
+
+code_print_help() {
+    cat <<'EOF'
+Usage: code <target>
+       code -i
+       code -h | -help | --help
+
+Arguments:
+  <target>             Path to open in VS Code Insiders.
+  -i                   Open the VS Code Insiders global instructions file.
+  -h, -help, --help    Show this help message.
+EOF
+}
