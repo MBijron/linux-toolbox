@@ -16,8 +16,13 @@ code() {
     wsl_target="$(code_convert_target_to_wsl_path "$target")" || return $?
     if [ ! -e "$wsl_target" ]; then
         printf '%s\n' 'Using c to resolve path'
-        c "$@" -c
-        return $?
+        if c "$@" -c; then
+            return 0
+        fi
+
+        printf '%s\n' 'No path resolved; passing raw arguments to code'
+        code_launch_with_raw_arguments "$executable_path" "$@" || return $?
+        return 0
     fi
 
     if code_is_windows_mount_path "$wsl_target"; then

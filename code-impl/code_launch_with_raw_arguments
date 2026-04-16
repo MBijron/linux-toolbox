@@ -1,0 +1,8 @@
+#!/bin/bash
+
+code_launch_with_raw_arguments() {
+    local executable_path="$1"
+    shift
+
+    "$executable_path" "$@"
+}
