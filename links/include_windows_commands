@@ -3,8 +3,23 @@
 unalias include_windows_commands >/dev/null 2>&1 || true
 
 include_windows_commands() {
-  if ! __tb_windows_path_apply_startup_cache; then
+  local shim_refresh_result="0"
+
+  if ! __tb_windows_path_apply_best_available_cache; then
     __tb_windows_path_refresh_cache || return 1
     __tb_windows_path_apply_startup_cache >/dev/null 2>&1 || true
   fi
+
+  __tb_windows_shim_refresh_from_cache_if_needed
+  shim_refresh_result="$?"
+
+  case "$shim_refresh_result" in
+    0) ;;
+    2)
+      if typeset -f windows_path_background_start >/dev/null 2>&1; then
+        windows_path_background_start >/dev/null 2>&1 || true
+      fi
+      ;;
+    *) return 1 ;;
+  esac
 }
