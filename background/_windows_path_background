@@ -55,7 +55,7 @@ windows_path_background_run_service() {
     local poll_interval_seconds="${WINDOWS_PATH_BACKGROUND_POLL_INTERVAL:-600}"
 
     while true; do
-        include_windows_command --refresh-cache >/dev/null 2>&1 || true
+        __tb_windows_path_refresh_cache >/dev/null 2>&1 || true
         sleep "$poll_interval_seconds" || return 0
     done
 }
@@ -80,7 +80,7 @@ windows_path_background_start() {
 
     TOOLBOX_SKIP_BACKGROUND_INIT=1 \
     TBDIR="${TBDIR:-/toolbox}" \
-    nohup "$shell_path" -lc 'source "$TBDIR/.core" >/dev/null 2>&1 || exit 1; windows_path_background_run_service' \
+    nohup "$shell_path" -lc 'source "$TBDIR/.env" >/dev/null 2>&1 || exit 1; source "$TBDIR/core/__tb_add_to_path" >/dev/null 2>&1 || exit 1; source "$TBDIR/background/_windows_path_background" >/dev/null 2>&1 || exit 1; windows_path_background_run_service' \
         >/dev/null 2>&1 &
     background_pid=$!
 
