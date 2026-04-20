@@ -6,6 +6,7 @@ _create_command_wrapper_for_function() {
   local bin_dir="$TBDIR/bin"
   local wrapper_path=""
   local empty_flag=false
+  local rewrite_legacy_wrapper=false
 
   # Parse arguments
   for arg in "$@"; do
@@ -29,9 +30,12 @@ _create_command_wrapper_for_function() {
 
   wrapper_path="$bin_dir/$wrapper_name"
 
-  # If the wrapper already exists, exit silently
   if [[ -f "$wrapper_path" ]]; then
-    return 0
+    if grep -Fqx '/toolboxcore' "$wrapper_path"; then
+      rewrite_legacy_wrapper=true
+    else
+      return 0
+    fi
   fi
 
   # If not empty, check if the function exists
@@ -53,7 +57,7 @@ EOF
     # Create the standard wrapper script
     cat > "$wrapper_path" <<EOF
 #!/bin/bash
-/toolboxcore
+source "/toolboxcore"
 
 if declare -F "$function_name" > /dev/null; then
   "$function_name" "\$@"
@@ -69,6 +73,8 @@ EOF
 
   if $empty_flag; then
     echo "Empty wrapper '$wrapper_name' created in $bin_dir."
+  elif $rewrite_legacy_wrapper; then
+    echo "Wrapper '$wrapper_name' updated in $bin_dir, calling function '$function_name'."
   else
     echo "Wrapper '$wrapper_name' created in $bin_dir, calling function '$function_name'."
   fi
