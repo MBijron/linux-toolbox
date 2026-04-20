@@ -11,6 +11,9 @@ _tbr_is_sourceable_file() {
   local filename="${file##*/}"
 
   [ -f "$file" ] || return 1
+  case "$file" in
+    "$TBDIR/init/"*) return 1 ;;
+  esac
   [[ "$filename" == *.* ]] && return 1
   [[ "$filename" == .* ]] && return 1
   [[ "$file" == "$TBDIR/tbr" ]] && return 1
