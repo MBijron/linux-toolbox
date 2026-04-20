@@ -2,7 +2,7 @@
 
 there() {
     local output_mode="summary"
-    local usage='Usage: there [--name|--path|--version|--call] <tool-name>'
+    local usage='Usage: there [--name|--path|--version|--call|--content] <tool-name>'
     local tool_name=""
     local resolved_path
     local executable_name
@@ -12,7 +12,7 @@ there() {
         case "$1" in
             --path)
                 if [[ "$output_mode" != "summary" ]]; then
-                    printf '%s\n' 'Error: Use only one of --name, --path, --version, or --call.' >&2
+                    printf '%s\n' 'Error: Use only one of --name, --path, --version, --call, or --content.' >&2
                     return 1
                 fi
 
@@ -20,7 +20,7 @@ there() {
                 ;;
             --name)
                 if [[ "$output_mode" != "summary" ]]; then
-                    printf '%s\n' 'Error: Use only one of --name, --path, --version, or --call.' >&2
+                    printf '%s\n' 'Error: Use only one of --name, --path, --version, --call, or --content.' >&2
                     return 1
                 fi
 
@@ -28,7 +28,7 @@ there() {
                 ;;
             --version)
                 if [[ "$output_mode" != "summary" ]]; then
-                    printf '%s\n' 'Error: Use only one of --name, --path, --version, or --call.' >&2
+                    printf '%s\n' 'Error: Use only one of --name, --path, --version, --call, or --content.' >&2
                     return 1
                 fi
 
@@ -36,15 +36,24 @@ there() {
                 ;;
             --call)
                 if [[ "$output_mode" != "summary" ]]; then
-                    printf '%s\n' 'Error: Use only one of --name, --path, --version, or --call.' >&2
+                    printf '%s\n' 'Error: Use only one of --name, --path, --version, --call, or --content.' >&2
                     return 1
                 fi
 
                 output_mode="call"
                 ;;
+            --content)
+                if [[ "$output_mode" != "summary" ]]; then
+                    printf '%s\n' 'Error: Use only one of --name, --path, --version, --call, or --content.' >&2
+                    return 1
+                fi
+
+                output_mode="content"
+                ;;
             --help|-h)
                 printf '%s\n' "$usage"
                 printf '%s\n' 'For --call, the output is one shell-escaped command line and __TB_WRAPPER_ARGS__ replaces the wrapper forwarded-arguments slot.'
+                printf '%s\n' 'For --content, the output is the wrapper file contents exactly as stored on disk.'
                 return 0
                 ;;
             --*)
@@ -74,6 +83,11 @@ there() {
 
     if [[ "$output_mode" == "call" ]]; then
         there_print_tool_call_template "$tool_name"
+        return $?
+    fi
+
+    if [[ "$output_mode" == "content" ]]; then
+        there_print_wrapper_content "$tool_name"
         return $?
     fi
 

@@ -1,0 +1,14 @@
+#!/bin/bash
+
+there_print_wrapper_content() {
+    local tool_name="$1"
+    local wrapper_path
+
+    wrapper_path="$(there_get_first_where_result "$tool_name")" || return $?
+    there_validate_wrapper_file "$wrapper_path" || return $?
+
+    cat -- "$wrapper_path" || {
+        printf 'Error: Failed to read wrapper file: %s\n' "$wrapper_path" >&2
+        return 5
+    }
+}
