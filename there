@@ -2,6 +2,7 @@
 
 there() {
     local output_mode="summary"
+    local usage='Usage: there [--name|--path|--version|--call] <tool-name>'
     local tool_name=""
     local resolved_path
     local executable_name
@@ -11,7 +12,7 @@ there() {
         case "$1" in
             --path)
                 if [[ "$output_mode" != "summary" ]]; then
-                    printf '%s\n' 'Error: Use only one of --name, --path, or --version.' >&2
+                    printf '%s\n' 'Error: Use only one of --name, --path, --version, or --call.' >&2
                     return 1
                 fi
 
@@ -19,7 +20,7 @@ there() {
                 ;;
             --name)
                 if [[ "$output_mode" != "summary" ]]; then
-                    printf '%s\n' 'Error: Use only one of --name, --path, or --version.' >&2
+                    printf '%s\n' 'Error: Use only one of --name, --path, --version, or --call.' >&2
                     return 1
                 fi
 
@@ -27,25 +28,34 @@ there() {
                 ;;
             --version)
                 if [[ "$output_mode" != "summary" ]]; then
-                    printf '%s\n' 'Error: Use only one of --name, --path, or --version.' >&2
+                    printf '%s\n' 'Error: Use only one of --name, --path, --version, or --call.' >&2
                     return 1
                 fi
 
                 output_mode="version"
                 ;;
+            --call)
+                if [[ "$output_mode" != "summary" ]]; then
+                    printf '%s\n' 'Error: Use only one of --name, --path, --version, or --call.' >&2
+                    return 1
+                fi
+
+                output_mode="call"
+                ;;
             --help|-h)
-                printf '%s\n' 'Usage: there [--name|--path|--version] <tool-name>'
+                printf '%s\n' "$usage"
+                printf '%s\n' 'For --call, the output is one shell-escaped command line and __TB_WRAPPER_ARGS__ replaces the wrapper forwarded-arguments slot.'
                 return 0
                 ;;
             --*)
                 printf 'Error: Unknown option "%s".\n' "$1" >&2
-                printf '%s\n' 'Usage: there [--name|--path|--version] <tool-name>' >&2
+                printf '%s\n' "$usage" >&2
                 return 1
                 ;;
             *)
                 if [[ -n "$tool_name" ]]; then
                     printf 'Error: Too many arguments.\n' >&2
-                    printf '%s\n' 'Usage: there [--name|--path|--version] <tool-name>' >&2
+                    printf '%s\n' "$usage" >&2
                     return 1
                 fi
 
@@ -58,8 +68,13 @@ there() {
 
     if [[ -z "$tool_name" ]]; then
         printf '%s\n' 'Error: No tool name provided.' >&2
-        printf '%s\n' 'Usage: there [--name|--path|--version] <tool-name>' >&2
+        printf '%s\n' "$usage" >&2
         return 1
+    fi
+
+    if [[ "$output_mode" == "call" ]]; then
+        there_print_tool_call_template "$tool_name"
+        return $?
     fi
 
     resolved_path="$(there_resolve_tool_executable_path "$tool_name")" || return $?

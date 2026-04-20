@@ -1,0 +1,91 @@
+#!/bin/bash
+
+there_print_tool_call_template() {
+    local tool_name="$1"
+    local wrapper_path
+    local first_line
+    local second_line
+    local target_path
+    local cmd_path
+    local target_command
+    local wrapper_call_line
+    local noglob_was_enabled="0"
+    local escaped_part=""
+    local template_output=""
+    local -a call_parts=()
+
+    wrapper_path="$(there_get_first_where_result "$tool_name")" || return $?
+    there_validate_wrapper_file "$wrapper_path" || return $?
+
+    first_line="$(sed -n '1p' "$wrapper_path")"
+    second_line="$(sed -n '2p' "$wrapper_path")"
+
+    target_path="$(there_resolve_tool_target_path "$tool_name")" || return $?
+
+    if [[ "$first_line" == '#!/bin/bash' && "$second_line" == '# toolbox-windows-shim' ]]; then
+        case "$target_path" in
+            *.cmd|*.bat)
+                cmd_path="$(__tb_windows_cmd_executable)" || {
+                    printf '%s\n' 'Error: cmd.exe is required to call .cmd or .bat targets directly.' >&2
+                    return 8
+                }
+
+                target_command="$target_path"
+                if [[ -e "$target_path" ]]; then
+                    target_command="$(wslpath -w "$target_path" 2>/dev/null || printf '%s' "$target_path")"
+                fi
+
+                call_parts=("$cmd_path" '/d' '/c' "$target_command")
+                ;;
+            *)
+                call_parts=("$target_path")
+                ;;
+        esac
+
+        call_parts+=('__TB_WRAPPER_ARGS__')
+    else
+        wrapper_call_line="$(grep -F '"$@"' "$wrapper_path" | grep -F "\"$target_path\"" | head -n 1)"
+
+        if [[ -z "$wrapper_call_line" ]]; then
+            printf 'Error: Failed to recover the forwarded-argument call template from %s\n' "$wrapper_path" >&2
+            return 8
+        else
+            wrapper_call_line="${wrapper_call_line//\"\$@\"/\"__TB_WRAPPER_ARGS__\"}"
+
+            case "$-" in
+                *f*) noglob_was_enabled="1" ;;
+            esac
+
+            set -f
+            eval "call_parts=($wrapper_call_line)" || {
+                if [[ "$noglob_was_enabled" != '1' ]]; then
+                    set +f
+                fi
+
+                printf 'Error: Failed to parse wrapper call template from %s\n' "$wrapper_path" >&2
+                return 8
+            }
+
+            if [[ "$noglob_was_enabled" != '1' ]]; then
+                set +f
+            fi
+
+            if [[ "${#call_parts[@]}" -eq 0 ]]; then
+                printf 'Error: No call template parts were parsed from %s\n' "$wrapper_path" >&2
+                return 8
+            fi
+        fi
+    fi
+
+    for target_command in "${call_parts[@]}"; do
+        printf -v escaped_part '%q' "$target_command"
+
+        if [[ -n "$template_output" ]]; then
+            template_output+=" "
+        fi
+
+        template_output+="$escaped_part"
+    done
+
+    printf '%s\n' "$template_output"
+}

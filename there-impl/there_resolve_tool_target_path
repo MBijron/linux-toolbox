@@ -1,0 +1,69 @@
+#!/bin/bash
+
+there_resolve_tool_target_path() {
+    local tool_name="$1"
+    local wrapper_path
+    local wrapper_name
+    local manifest_name
+    local shim_target
+    local first_line
+    local second_line
+    local wrapper_contents
+    local candidate_path
+    local found_candidate=false
+
+    wrapper_path="$(there_get_first_where_result "$tool_name")" || return $?
+    there_validate_wrapper_file "$wrapper_path" || return $?
+
+    first_line="$(sed -n '1p' "$wrapper_path")"
+    second_line="$(sed -n '2p' "$wrapper_path")"
+
+    if [[ "$first_line" == '#!/bin/bash' && "$second_line" == '# toolbox-windows-shim' ]]; then
+        wrapper_name="${wrapper_path##*/}"
+        manifest_name="${wrapper_name%.exe}"
+        manifest_name="${manifest_name%.cmd}"
+        manifest_name="${manifest_name%.bat}"
+        shim_target="$(__tb_windows_shim_manifest_read_target "$manifest_name" 2>/dev/null)"
+
+        if [[ -n "$shim_target" ]]; then
+            if [[ -e "$shim_target" ]]; then
+                printf '%s\n' "$shim_target"
+                return 0
+            fi
+
+            printf 'Error: Shim target does not exist on this system: %s\n' "$shim_target" >&2
+            return 7
+        fi
+
+        printf 'Error: No shim target was found for wrapper file: %s\n' "$wrapper_path" >&2
+        return 6
+    fi
+
+    wrapper_contents="$(cat "$wrapper_path")" || {
+        printf 'Error: Failed to read wrapper file: %s\n' "$wrapper_path" >&2
+        return 5
+    }
+
+    while IFS= read -r candidate_path; do
+        [[ -z "$candidate_path" ]] && continue
+        found_candidate=true
+
+        if [[ -f "$candidate_path" ]]; then
+            printf '%s\n' "$candidate_path"
+            return 0
+        fi
+    done < <(
+        printf '%s\n' "$wrapper_contents" |
+            grep -oE '"[^"]+\.exe"' |
+            tr -d '"' |
+            awk '!seen[$0]++'
+    )
+
+    if ! $found_candidate; then
+        printf 'Error: No executable paths were found in wrapper file: %s\n' "$wrapper_path" >&2
+        return 6
+    fi
+
+    printf 'Error: No executable path from wrapper exists on this system: %s\n' "$wrapper_path" >&2
+    return 7
+}

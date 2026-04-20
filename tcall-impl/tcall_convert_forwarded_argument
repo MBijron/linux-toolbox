@@ -1,0 +1,12 @@
+#!/bin/bash
+
+tcall_convert_forwarded_argument() {
+    local argument="$1"
+
+    if [[ -e "$argument" ]]; then
+        wslpath -w "$argument" 2>/dev/null || printf '%s\n' "$argument"
+        return $?
+    fi
+
+    printf '%s\n' "$argument"
+}

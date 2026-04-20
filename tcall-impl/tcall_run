@@ -1,0 +1,86 @@
+#!/bin/bash
+
+tcall_run() {
+    local usage='Usage: tcall <tool-name> [arguments...]'
+    local tool_name=""
+    local template_line=""
+    local placeholder_seen="0"
+    local should_convert_arguments="0"
+    local converted_argument=""
+    local noglob_was_enabled="0"
+    local -a forwarded_arguments=()
+    local -a converted_arguments=()
+    local -a template_parts=()
+    local -a command_parts=()
+
+    if [[ "$1" == '-h' || "$1" == '--help' || "$1" == '-help' ]]; then
+        printf '%s\n' "$usage"
+        return 0
+    fi
+
+    if [[ $# -eq 0 ]]; then
+        printf '%s\n' 'Error: No tool name provided.' >&2
+        printf '%s\n' "$usage" >&2
+        return 1
+    fi
+
+    tool_name="$1"
+    shift
+    forwarded_arguments=("$@")
+
+    template_line="$(there --call "$tool_name")" || return $?
+
+    if [[ -z "$template_line" ]]; then
+        printf 'Error: there --call returned no command template for "%s".\n' "$tool_name" >&2
+        return 1
+    fi
+
+    case "$-" in
+        *f*) noglob_was_enabled="1" ;;
+    esac
+
+    set -f
+    eval "template_parts=($template_line)" || {
+        if [[ "$noglob_was_enabled" != '1' ]]; then
+            set +f
+        fi
+
+        printf 'Error: there --call returned an invalid command template for "%s".\n' "$tool_name" >&2
+        return 1
+    }
+
+    if [[ "$noglob_was_enabled" != '1' ]]; then
+        set +f
+    fi
+
+    if tcall_wrapper_uses_argument_conversion "$tool_name"; then
+        should_convert_arguments="1"
+    fi
+
+    for template_line in "${forwarded_arguments[@]}"; do
+        if [[ "$should_convert_arguments" == '1' ]]; then
+            converted_argument="$(tcall_convert_forwarded_argument "$template_line")" || return $?
+        else
+            converted_argument="$template_line"
+        fi
+
+        converted_arguments+=("$converted_argument")
+    done
+
+    for template_line in "${template_parts[@]}"; do
+        if [[ "$template_line" == '__TB_WRAPPER_ARGS__' ]]; then
+            placeholder_seen="1"
+            command_parts+=("${converted_arguments[@]}")
+            continue
+        fi
+
+        command_parts+=("$template_line")
+    done
+
+    if [[ "$placeholder_seen" != '1' ]]; then
+        printf 'Error: there --call returned an invalid template for "%s".\n' "$tool_name" >&2
+        return 1
+    fi
+
+    "${command_parts[@]}"
+}

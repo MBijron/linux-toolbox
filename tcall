@@ -1,0 +1,7 @@
+#!/bin/bash
+
+tcall() {
+    tcall_run "$@"
+}
+
+_create_command_wrapper_for_function "tcall"
