@@ -17,8 +17,9 @@ c_worktree_entry_metadata() {
     fi
 
     if [[ "$repo_path" == *".worktrees/"* ]]; then
-        base_name="${repo_path%/.worktrees/*}"
+        base_name="${repo_path%/*}"
         base_name="${base_name##*/}"
+        base_name="${base_name%.worktrees}"
         branch_path="${repo_path##*/}"
     elif [[ -n "$raw_name" && "$raw_name" == *.worktree.* ]]; then
         base_name="${raw_name%%.worktree.*}"

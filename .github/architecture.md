@@ -23,7 +23,9 @@
 ## Git helpers
 
 - `xgit_bin/` contains alias-addressable Git helpers such as branch switching and worktree management.
-- `xgit_bin/git_worktree` provides `xgit w checkout` and `xgit w remove`, creating sibling worktrees beside the main repository with the naming pattern `<repo>.worktree.<branch>`.
+- `xgit_bin/git_worktree` provides `xgit w checkout` and `xgit w remove`, creating sibling worktrees beside the main repository under `<repo>.worktrees/<branch-tail>`.
+- `xgit_bin/git_worktree` accepts both local branches and origin-only branches for `xgit w checkout`; when only `origin/<branch>` exists, it creates a local tracking branch directly in the new worktree.
+- `xgit_bin/git_worktree` resolves `xgit w remove <text>` against linked worktree paths from `git worktree list --porcelain`, normalizes Windows/UNC paths back to WSL paths, and explicitly excludes the main repository entry; it blocks removal when the worktree is dirty or ahead of its upstream, and when no upstream is configured it compares against `origin/<branch>` before falling back to broader remote containment checks. `xgit w remove --force <text>` skips those local safety checks and passes `--force` through to `git worktree remove`, while still asking for `y/N` confirmation.
 - `xgit_bin/git_worktree` prefers the native Linux `git` binary for worktree operations so Windows-mounted repositories do not hit `git.exe` path-length limits during checkout.
 - `xgit_bin/git_worktree` refreshes the `c` repo-map cache after successful add/remove operations so new worktrees are immediately searchable.
 - When a helper must fall back to `git.exe` for a path argument on `/mnt/*`, it should convert the WSL path before invoking Git.

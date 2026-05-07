@@ -16,6 +16,9 @@ git_worktree() {
     local target_path
     local target_parent_path
     local create_branch="0"
+    local force_remove="0"
+    local local_branch_exists="0"
+    local confirmation
 
     if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
         echo "Error: Not in a valid Git repository. Please switch to a valid Git repository."
@@ -63,7 +66,11 @@ git_worktree() {
                     return 1
                 fi
             else
-                if ! git show-ref --verify --quiet "refs/heads/$branch_name"; then
+                if git show-ref --verify --quiet "refs/heads/$branch_name"; then
+                    local_branch_exists="1"
+                elif git show-ref --verify --quiet "refs/remotes/origin/$branch_name"; then
+                    remote_branch_exists="1"
+                else
                     echo "Error: Branch '$branch_name' does not exist."
                     return 1
                 fi
@@ -92,7 +99,14 @@ git_worktree() {
                     return 1
                 fi
             else
-                if ! git -c core.longpaths=true worktree add "$git_target_path" "$branch_name"; then
+                if [[ "$local_branch_exists" == "1" ]]; then
+                    if ! git -c core.longpaths=true worktree add "$git_target_path" "$branch_name"; then
+                        rm -rf "$target_path"
+                        git_worktree_remove_empty_parents "$target_parent_path" "$worktrees_dir"
+                        git worktree prune >/dev/null 2>&1 || true
+                        return 1
+                    fi
+                elif ! git -c core.longpaths=true worktree add --track -b "$branch_name" "$git_target_path" "origin/$branch_name"; then
                     rm -rf "$target_path"
                     git_worktree_remove_empty_parents "$target_parent_path" "$worktrees_dir"
                     git worktree prune >/dev/null 2>&1 || true
@@ -108,17 +122,30 @@ git_worktree() {
             ;;
         remove)
             shift || true
+
+            if [[ "$1" == "--force" ]]; then
+                force_remove="1"
+                shift || true
+            fi
+
             target_input="$1"
 
             if [[ -z "$target_input" || $# -ne 1 ]]; then
-                echo "Usage: xgit w remove <branch-or-path>"
+                echo "Usage: xgit w remove [--force] <branch-or-path>"
                 return 1
             fi
 
             if [[ -d "$target_input" || "$target_input" == /* || "$target_input" == ./* || "$target_input" == ../* ]]; then
                 target_path="$target_input"
             else
-                target_path="${worktrees_dir}/${target_input##*/}"
+                target_path="$(git_worktree_resolve_remove_path "$main_repo_root" "$target_input")" || return 1
+            fi
+
+            target_path="$(git_worktree_normalize_local_path "$target_path")"
+
+            if [[ -z "$target_path" ]]; then
+                echo "Error: No worktree matched '$target_input'."
+                return 1
             fi
 
             if [[ ! -d "$target_path" ]]; then
@@ -126,12 +153,42 @@ git_worktree() {
                 return 1
             fi
 
+            if [[ "$force_remove" != "1" ]]; then
+                if git_worktree_has_uncommitted_changes "$target_path"; then
+                    git_worktree_print_red "Refusing to remove '$target_path': uncommitted changes detected."
+                    return 1
+                fi
+
+                local unpushed_reason
+                unpushed_reason="$(git_worktree_get_unpushed_reason "$target_path")"
+                if [[ -n "$unpushed_reason" ]]; then
+                    git_worktree_print_red "Refusing to remove '$target_path': $unpushed_reason"
+                    return 1
+                fi
+            fi
+
+            if [[ ! -t 0 ]]; then
+                echo "Error: Confirmation required to remove worktree: $target_path"
+                return 1
+            fi
+
+            printf 'Remove worktree "%s"? [y/N]: ' "$target_path" >&2
+            read -r confirmation
+            if [[ ! "$confirmation" =~ ^[Yy]$ ]]; then
+                echo "Cancelled."
+                return 0
+            fi
+
             git_target_path="$target_path"
             if command -v go_prepare_path_for_git_command >/dev/null 2>&1; then
                 git_target_path="$(go_prepare_path_for_git_command "$target_path")" || return $?
             fi
 
-            git -c core.longpaths=true worktree remove "$git_target_path" || return 1
+            if [[ "$force_remove" == "1" ]]; then
+                git -c core.longpaths=true worktree remove --force "$git_target_path" || return 1
+            else
+                git -c core.longpaths=true worktree remove "$git_target_path" || return 1
+            fi
             git worktree prune >/dev/null 2>&1 || true
             git_worktree_remove_empty_parents "${target_path%/*}" "$worktrees_dir"
 
@@ -146,6 +203,186 @@ git_worktree() {
             return 1
             ;;
     esac
+}
+
+git_worktree_resolve_remove_path() {
+    local main_repo_root="$1"
+    local search_text="$2"
+    local lowered_search_text
+    local matched_paths
+    local match_count
+
+    lowered_search_text="$(git_worktree_to_lower "$search_text")"
+    main_repo_root="$(git_worktree_normalize_local_path "$main_repo_root")"
+
+    matched_paths="$(git worktree list --porcelain | sed -n 's/^worktree //p' | while IFS= read -r candidate_path; do
+        candidate_path="$(git_worktree_normalize_local_path "$candidate_path")"
+        if [[ -n "$candidate_path" && "$candidate_path" != "$main_repo_root" ]]; then
+            printf '%s\n' "$candidate_path"
+        fi
+    done | awk -v lowered_search_text="$lowered_search_text" 'index(tolower($0), lowered_search_text) > 0 { print }')"
+
+    match_count="$(printf '%s\n' "$matched_paths" | awk 'NF { count++ } END { print count + 0 }')"
+
+    if [[ "$match_count" -eq 0 ]]; then
+        echo "Error: No worktree matched '$search_text'." >&2
+        return 1
+    fi
+
+    if [[ "$match_count" -gt 1 ]]; then
+        echo "Error: Multiple worktrees matched '$search_text':" >&2
+        printf '%s\n' "$matched_paths" | sed 's/^/  /' >&2
+        return 1
+    fi
+
+    printf '%s\n' "$matched_paths" | awk 'NF { print; exit }'
+}
+
+git_worktree_has_uncommitted_changes() {
+    local target_path="$1"
+    local git_command
+    local git_repo_path
+
+    git_command="$(git_worktree_choose_git_command "$target_path")" || return 1
+    git_repo_path="$(git_worktree_prepare_git_repo_path "$target_path" "$git_command")" || return 1
+
+    [[ -n "$("$git_command" -C "$git_repo_path" status --porcelain 2>/dev/null)" ]]
+}
+
+git_worktree_has_unpushed_commits() {
+    [[ -n "$(git_worktree_get_unpushed_reason "$1")" ]]
+}
+
+git_worktree_get_unpushed_reason() {
+    local target_path="$1"
+    local git_command
+    local git_repo_path
+    local upstream_ref
+    local branch_name
+    local origin_branch_ref
+    local ahead_count
+
+    git_command="$(git_worktree_choose_git_command "$target_path")" || return 1
+    git_repo_path="$(git_worktree_prepare_git_repo_path "$target_path" "$git_command")" || return 1
+
+    upstream_ref="$("$git_command" -C "$git_repo_path" rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null)"
+    branch_name="$("$git_command" -C "$git_repo_path" rev-parse --abbrev-ref HEAD 2>/dev/null)"
+
+    if [[ -n "$upstream_ref" ]]; then
+        ahead_count="$("$git_command" -C "$git_repo_path" rev-list --count "${upstream_ref}..HEAD" 2>/dev/null)"
+        if [[ "${ahead_count:-0}" -gt 0 ]]; then
+            printf "branch '%s' is ahead of '%s' by %s commit(s).\n" "$branch_name" "$upstream_ref" "$ahead_count"
+            return 0
+        fi
+
+        return 1
+    fi
+
+    origin_branch_ref="refs/remotes/origin/${branch_name}"
+
+    if [[ -n "$branch_name" ]] && "$git_command" -C "$git_repo_path" show-ref --verify --quiet "$origin_branch_ref"; then
+        ahead_count="$("$git_command" -C "$git_repo_path" rev-list --count "origin/${branch_name}..HEAD" 2>/dev/null)"
+        if [[ "${ahead_count:-0}" -gt 0 ]]; then
+            printf "branch '%s' has %s commit(s) that are not on 'origin/%s'.\n" "$branch_name" "$ahead_count" "$branch_name"
+            return 0
+        fi
+
+        return 1
+    fi
+
+    if [[ -z "$("$git_command" -C "$git_repo_path" branch -r --contains HEAD 2>/dev/null)" ]]; then
+        if [[ -n "$branch_name" ]]; then
+            printf "branch '%s' has no upstream and is not contained in any remote branch.\n" "$branch_name"
+        else
+            printf '%s\n' 'HEAD is not contained in any remote branch.'
+        fi
+        return 0
+    fi
+
+    return 1
+}
+
+git_worktree_print_red() {
+    local message="$1"
+
+    if [[ -t 2 ]]; then
+        printf '\033[1;31m%s\033[0m\n' "$message" >&2
+        return 0
+    fi
+
+    printf '%s\n' "$message" >&2
+}
+
+git_worktree_to_lower() {
+    printf '%s' "$1" | tr '[:upper:]' '[:lower:]'
+}
+
+git_worktree_trim_carriage_return() {
+    printf '%s' "$1" | tr -d '\r'
+}
+
+git_worktree_normalize_local_path() {
+    local target_path="$1"
+
+    target_path="$(git_worktree_trim_carriage_return "$target_path")"
+
+    case "$target_path" in
+        [A-Za-z]:/*|[A-Za-z]:\\*|\\*|//* )
+            if command -v wslpath >/dev/null 2>&1; then
+                wslpath -u "$target_path" 2>/dev/null || printf '%s' "$target_path"
+                return 0
+            fi
+            ;;
+    esac
+
+    printf '%s' "$target_path"
+}
+
+git_worktree_choose_git_command() {
+    local target_path="$1"
+    local gitdir_file="$target_path/.git"
+    local gitdir_target=""
+    local git_alias
+    local git_command_path
+
+    if [[ -f "$gitdir_file" ]]; then
+        gitdir_target="$(sed -n 's/^gitdir: //p' "$gitdir_file" | head -n 1)"
+        gitdir_target="$(git_worktree_trim_carriage_return "$gitdir_target")"
+        case "$gitdir_target" in
+            [A-Za-z]:/*|[A-Za-z]:\\*|\\*|//* )
+                if command -v git.exe >/dev/null 2>&1; then
+                    printf '%s\n' "git.exe"
+                    return 0
+                fi
+                ;;
+        esac
+    fi
+
+    git_alias="$(alias git 2>/dev/null || true)"
+    git_command_path="$(command -v git 2>/dev/null || true)"
+
+    if [[ "$git_alias" == *"git.exe"* || "$git_command_path" == *.exe ]]; then
+        if command -v git.exe >/dev/null 2>&1; then
+            printf '%s\n' "git.exe"
+            return 0
+        fi
+    fi
+
+    printf '%s\n' "git"
+}
+
+git_worktree_prepare_git_repo_path() {
+    local target_path="$1"
+    local git_command="$2"
+
+    if [[ "$git_command" == *.exe || "$git_command" == "git.exe" ]]; then
+        if command -v wslpath >/dev/null 2>&1; then
+            wslpath -w "$target_path" 2>/dev/null || printf '%s' "$target_path"
+            return 0
+        fi
+    fi
+
+    printf '%s' "$target_path"
 }
 
 git_worktree_remove_empty_parents() {
