@@ -2,27 +2,57 @@
 
 c_print_repo_map() {
     local color_abbr=""
+    local color_worktree_badge=""
     local color_name=""
     local color_archive_name=""
+    local color_ticket=""
     local color_reset=""
     local active_name_color
+    local ticket_metadata
+    local ticket_segment
+    local unused_ticket_abbreviation
+    local unused_base_name
+    local name_column
+    local raw_folder_name
+    local name_prefix=""
+    local name_label
 
     if [[ -t 1 ]]; then
         color_abbr=$'\033[1;36m'
+        color_worktree_badge=$'\033[0;33m'
         color_name=$'\033[0;37m'
         color_archive_name=$'\033[0;90m'
+        color_ticket=$'\033[0;90m'
         color_reset=$'\033[0m'
     fi
 
     c_read_repo_map_cache | while IFS=$'\t' read -r repo_path folder_name abbreviation; do
         active_name_color="$color_name"
+        ticket_segment=""
+        name_prefix=""
+        raw_folder_name="${repo_path##*/}"
+        name_label="$folder_name"
 
         if [[ "$folder_name" == "archive" && "$abbreviation" == "_" ]]; then
             active_name_color="$color_archive_name"
         fi
 
+        if ticket_metadata="$(c_worktree_entry_metadata "$repo_path" "$raw_folder_name" 2>/dev/null)"; then
+            IFS=$'\t' read -r ticket_segment unused_ticket_abbreviation unused_base_name <<< "$ticket_metadata"
+            name_label="${color_worktree_badge}[w]${color_reset} ${active_name_color}${folder_name}"
+        fi
+
         printf '%b%s%b\t%b%s\n' \
             "$color_abbr" "$abbreviation" "$color_reset" \
-            "$active_name_color" "$folder_name$color_reset"
+            "$active_name_color" "$name_label$color_reset"
+
+        if [[ -n "$ticket_segment" ]]; then
+            name_column=$(( (${#abbreviation} / 8) + 1 ))
+            name_column=$(( name_column * 8 ))
+            name_column=$(( name_column + 4 ))
+            printf '%*s%b%s%b\n' \
+                "$name_column" '' \
+                "$color_ticket" "$ticket_segment" "$color_reset"
+        fi
     done
 }

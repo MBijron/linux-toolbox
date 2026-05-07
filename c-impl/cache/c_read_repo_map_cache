@@ -2,9 +2,24 @@
 
 c_read_repo_map_cache() {
     local cache_path
+    local toolbox_dir
 
     cache_path="$(c_cache_path)"
-    [[ -f "$cache_path" ]] || return 0
+    toolbox_dir="${TBDIR:-/toolbox}"
+
+    if [[ ! -s "$cache_path" ]]; then
+        if command -v c_update_repo_map_cache >/dev/null 2>&1; then
+            c_update_repo_map_cache >/dev/null 2>&1 || return 0
+        else
+            return 0
+        fi
+    fi
+
+    if find "$toolbox_dir/c" "$toolbox_dir/c-impl" -type f -newer "$cache_path" -print -quit 2>/dev/null | grep -q .; then
+        if command -v c_update_repo_map_cache >/dev/null 2>&1; then
+            c_update_repo_map_cache >/dev/null 2>&1 || return 0
+        fi
+    fi
 
     cat "$cache_path"
 }

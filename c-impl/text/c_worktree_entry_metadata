@@ -1,0 +1,66 @@
+#!/bin/bash
+
+c_worktree_entry_metadata() {
+    local repo_path="$1"
+    local raw_name="$2"
+    local base_name
+    local branch_path
+    local ticket_prefix
+    local ticket_remainder
+    local ticket_digits
+    local ticket_initial
+    local abbreviation
+    local abbreviation_source
+
+    if [[ -z "$repo_path" ]]; then
+        return 1
+    fi
+
+    if [[ "$repo_path" == *".worktrees/"* ]]; then
+        base_name="${repo_path%/.worktrees/*}"
+        base_name="${base_name##*/}"
+        branch_path="${repo_path##*/}"
+    elif [[ -n "$raw_name" && "$raw_name" == *.worktree.* ]]; then
+        base_name="${raw_name%%.worktree.*}"
+        branch_path="${raw_name#*.worktree.}"
+    else
+        return 1
+    fi
+
+    if [[ -z "$base_name" || -z "$branch_path" ]]; then
+        return 1
+    fi
+
+    ticket_prefix="${branch_path%%-*}"
+    if [[ -n "$ticket_prefix" && "$ticket_prefix" =~ ^[[:alpha:]][[:alpha:]]*$ ]]; then
+        ticket_remainder="${branch_path#${ticket_prefix}-}"
+        if [[ -n "$ticket_remainder" && "$ticket_remainder" != "$branch_path" ]]; then
+            ticket_digits="${ticket_remainder%%[^0-9]*}"
+            if [[ -n "$ticket_digits" ]]; then
+                ticket_initial="${ticket_prefix%${ticket_prefix#?}}"
+                if [[ -n "${ZSH_VERSION-}" ]]; then
+                    ticket_initial="${(L)ticket_initial}"
+                else
+                    ticket_initial="${ticket_initial,,}"
+                fi
+                abbreviation="${ticket_initial}${ticket_digits}"
+                printf '%s\t%s\t%s\n' "$branch_path" "$abbreviation" "$base_name"
+                return 0
+            fi
+        fi
+    fi
+
+    abbreviation_source="${branch_path//\//-}"
+    abbreviation="$(c_abbreviate "$abbreviation_source")"
+    abbreviation="${abbreviation:0:4}"
+    if [[ -z "$abbreviation" ]]; then
+        abbreviation="${abbreviation_source:0:4}"
+        if [[ -n "${ZSH_VERSION-}" ]]; then
+            abbreviation="${(L)abbreviation}"
+        else
+            abbreviation="${abbreviation,,}"
+        fi
+    fi
+
+    printf '%s\t%s\t%s\n' "$branch_path" "$abbreviation" "$base_name"
+}

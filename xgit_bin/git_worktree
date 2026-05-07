@@ -1,0 +1,162 @@
+#!/bin/bash
+# w
+
+git_worktree() {
+    local subcommand="$1"
+    local git_target_path
+    local repo_root
+    local common_git_dir
+    local main_repo_root
+    local parent_dir
+    local repo_dir_name
+    local worktrees_dir
+    local branch_name
+    local branch_dir_name
+    local target_input
+    local target_path
+    local target_parent_path
+    local create_branch="0"
+
+    if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+        echo "Error: Not in a valid Git repository. Please switch to a valid Git repository."
+        return 1
+    fi
+
+    repo_root="$(git rev-parse --path-format=absolute --show-toplevel 2>/dev/null || git rev-parse --show-toplevel 2>/dev/null)" || return 1
+    common_git_dir="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null || git rev-parse --git-common-dir 2>/dev/null)" || return 1
+
+    if [[ "$common_git_dir" == */.git ]]; then
+        main_repo_root="${common_git_dir%/.git}"
+    else
+        main_repo_root="$repo_root"
+    fi
+
+    parent_dir="${main_repo_root%/*}"
+    repo_dir_name="${main_repo_root##*/}"
+    worktrees_dir="${parent_dir}/${repo_dir_name}.worktrees"
+
+    case "$subcommand" in
+        checkout)
+            shift || true
+
+            if [[ "$1" == "-b" ]]; then
+                create_branch="1"
+                shift || true
+            fi
+
+            branch_name="$1"
+            branch_dir_name="${branch_name##*/}"
+
+            if [[ -z "$branch_name" || $# -ne 1 ]]; then
+                echo "Usage: xgit w checkout [-b] <branch>"
+                return 1
+            fi
+
+            if [[ -z "$branch_dir_name" ]]; then
+                echo "Error: Branch '$branch_name' does not produce a valid worktree directory name."
+                return 1
+            fi
+
+            if [[ "$create_branch" == "1" ]]; then
+                if git show-ref --verify --quiet "refs/heads/$branch_name"; then
+                    echo "Error: Branch '$branch_name' already exists."
+                    return 1
+                fi
+            else
+                if ! git show-ref --verify --quiet "refs/heads/$branch_name"; then
+                    echo "Error: Branch '$branch_name' does not exist."
+                    return 1
+                fi
+            fi
+
+            target_path="${worktrees_dir}/${branch_dir_name}"
+            if [[ -e "$target_path" ]]; then
+                echo "Error: Worktree path already exists: $target_path"
+                return 1
+            fi
+
+            target_parent_path="${target_path%/*}"
+            mkdir -p "$target_parent_path" || return 1
+
+            git_target_path="$target_path"
+            if command -v go_prepare_path_for_git_command >/dev/null 2>&1; then
+                git_target_path="$(go_prepare_path_for_git_command "$target_path")" || return $?
+            fi
+
+            if [[ "$create_branch" == "1" ]]; then
+                if ! git -c core.longpaths=true worktree add -b "$branch_name" "$git_target_path"; then
+                    rm -rf "$target_path"
+                    git_worktree_remove_empty_parents "$target_parent_path" "$worktrees_dir"
+                    git worktree prune >/dev/null 2>&1 || true
+                    git branch -D "$branch_name" >/dev/null 2>&1 || true
+                    return 1
+                fi
+            else
+                if ! git -c core.longpaths=true worktree add "$git_target_path" "$branch_name"; then
+                    rm -rf "$target_path"
+                    git_worktree_remove_empty_parents "$target_parent_path" "$worktrees_dir"
+                    git worktree prune >/dev/null 2>&1 || true
+                    return 1
+                fi
+            fi
+
+            if command -v c_update_repo_map_cache >/dev/null 2>&1; then
+                c_update_repo_map_cache >/dev/null 2>&1 || true
+            fi
+
+            echo "Created worktree: $target_path"
+            ;;
+        remove)
+            shift || true
+            target_input="$1"
+
+            if [[ -z "$target_input" || $# -ne 1 ]]; then
+                echo "Usage: xgit w remove <branch-or-path>"
+                return 1
+            fi
+
+            if [[ -d "$target_input" || "$target_input" == /* || "$target_input" == ./* || "$target_input" == ../* ]]; then
+                target_path="$target_input"
+            else
+                target_path="${worktrees_dir}/${target_input##*/}"
+            fi
+
+            if [[ ! -d "$target_path" ]]; then
+                echo "Error: Worktree path does not exist: $target_path"
+                return 1
+            fi
+
+            git_target_path="$target_path"
+            if command -v go_prepare_path_for_git_command >/dev/null 2>&1; then
+                git_target_path="$(go_prepare_path_for_git_command "$target_path")" || return $?
+            fi
+
+            git -c core.longpaths=true worktree remove "$git_target_path" || return 1
+            git worktree prune >/dev/null 2>&1 || true
+            git_worktree_remove_empty_parents "${target_path%/*}" "$worktrees_dir"
+
+            if command -v c_update_repo_map_cache >/dev/null 2>&1; then
+                c_update_repo_map_cache >/dev/null 2>&1 || true
+            fi
+
+            echo "Removed worktree: $target_path"
+            ;;
+        *)
+            echo "Usage: xgit w <checkout|remove> ..."
+            return 1
+            ;;
+    esac
+}
+
+git_worktree_remove_empty_parents() {
+    local current_path="$1"
+    local stop_path="$2"
+
+    while [[ -n "$current_path" && "$current_path" == "$stop_path"* ]]; do
+        rmdir "$current_path" >/dev/null 2>&1 || break
+        if [[ "$current_path" == "$stop_path" ]]; then
+            break
+        fi
+        current_path="${current_path%/*}"
+    done
+}

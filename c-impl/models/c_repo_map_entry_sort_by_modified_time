@@ -2,7 +2,8 @@
 
 c_repo_map_entry_sort_by_modified_time() {
     awk -F '\t' 'BEGIN { OFS = FS } {
+        worktree_sort_key = (($2 ~ /\.worktree\./) || ($2 ~ /\.worktrees\//)) ? 1 : 0
         archive_sort_key = (($3 == "archive") && ($4 == "_")) ? 1 : 0
-        print archive_sort_key, $0
+        print worktree_sort_key + archive_sort_key, $0
     }' | sort -t $'\t' -k1,1n -k2,2nr | cut -f3-
 }

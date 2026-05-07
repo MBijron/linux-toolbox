@@ -8,6 +8,9 @@ c_build_repo_map() {
     local repo_path
     local folder_name
     local abbreviation
+    local worktree_path
+    local worktree_name
+    local worktree_timestamp
 
     {
         while IFS= read -r root; do
@@ -18,6 +21,16 @@ c_build_repo_map() {
                 repo_details="${repo_record#*$'\t'}"
                 folder_name="${repo_details%%$'\t'*}"
                 repo_path="${repo_details#*$'\t'}"
+
+                if [[ "$folder_name" == *.worktrees ]]; then
+                    while IFS= read -r -d '' worktree_path; do
+                        [[ -e "$worktree_path/.git" ]] || continue
+                        worktree_name="${worktree_path##*/}"
+                        worktree_timestamp="$(stat -c '%Y' "$worktree_path" 2>/dev/null || printf '0')"
+                        c_repo_map_entry_create "$worktree_path" "$worktree_name" "$worktree_timestamp"
+                    done < <(find "$repo_path" -mindepth 1 -maxdepth 1 -type d -print0 2>/dev/null)
+                    continue
+                fi
 
                 c_repo_map_entry_create "$repo_path" "$folder_name" "$modified_timestamp"
             done < <(find "$root" -mindepth 1 -maxdepth 1 -type d -printf '%T@\t%f\t%p\0' 2>/dev/null)

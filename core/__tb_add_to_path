@@ -16,34 +16,6 @@ __tb_windows_shim_manifest_path() {
   printf '%s/core/windows_shims.cache\n' "$TBDIR"
 }
 
-__tb_windows_shim_manifest_read_target() {
-  local target_command="$1"
-  local manifest_path=""
-  local command_name=""
-  local shim_target=""
-
-  manifest_path="$(__tb_windows_shim_manifest_path)"
-  [ -f "$manifest_path" ] || return 1
-
-  while IFS=$'\t' read -r command_name shim_target || [ -n "$command_name" ]; do
-    if [ "$command_name" = "$target_command" ] && [ -n "$shim_target" ]; then
-      printf '%s\n' "$shim_target"
-      return 0
-    fi
-  done < "$manifest_path"
-
-  return 1
-}
-
-__tb_windows_cmd_executable() {
-  if [ -x /mnt/c/Windows/System32/cmd.exe ]; then
-    printf '/mnt/c/Windows/System32/cmd.exe\n'
-    return 0
-  fi
-
-  command -v cmd.exe 2>/dev/null || return 1
-}
-
 __tb_add_to_path_trim_line() {
   local line="$1"
 
@@ -134,191 +106,6 @@ __tb_windows_path_without_toolbox_bin() {
   done
 
   printf '%s\n' "$filtered_path"
-}
-
-__tb_windows_path_is_windows_entry() {
-  case "$1" in
-    /mnt/[A-Za-z]/*) return 0 ;;
-    *) return 1 ;;
-  esac
-}
-
-__tb_windows_path_normalize_entry_key() {
-  local entry="$1"
-
-  entry="$(__tb_add_to_path_trim_line "$entry")"
-
-  while [ -n "$entry" ] && [ "${entry%/}" != "$entry" ]; do
-    entry="${entry%/}"
-  done
-
-  printf '%s\n' "$(printf '%s' "$entry" | tr '[:upper:]' '[:lower:]')"
-}
-
-__tb_windows_path_compare_key() {
-  local entry="$1"
-
-  if __tb_windows_path_is_windows_entry "$entry"; then
-    __tb_windows_path_normalize_entry_key "$entry"
-    return 0
-  fi
-
-  printf '%s\n' "$entry"
-}
-
-__tb_windows_path_filter_windows_entries() {
-  local path_value="$1"
-  local remaining=""
-  local entry=""
-  local entry_key=""
-  local filtered_path=""
-  local -a entries=()
-  local -a entry_keys=()
-
-  remaining="$path_value"
-
-  while [ -n "$remaining" ]; do
-    case "$remaining" in
-      *:*)
-        entry="${remaining%%:*}"
-        remaining="${remaining#*:}"
-        ;;
-      *)
-        entry="$remaining"
-        remaining=""
-        ;;
-    esac
-
-    entry="$(__tb_add_to_path_trim_line "$entry")"
-    entry_key="$(__tb_windows_path_normalize_entry_key "$entry")"
-
-    if [ -z "$entry_key" ] || ! __tb_windows_path_is_windows_entry "$entry"; then
-      continue
-    fi
-
-    if ! __tb_add_to_path_array_contains "$entry_key" "${entry_keys[@]}"; then
-      entries+=("$entry")
-      entry_keys+=("$entry_key")
-    fi
-  done
-
-  for entry in "${entries[@]}"; do
-    filtered_path+="${filtered_path:+:}${entry}"
-  done
-
-  printf '%s\n' "$filtered_path"
-}
-
-__tb_windows_path_filter_non_windows_entries() {
-  local path_value="$1"
-  local remaining=""
-  local entry=""
-  local entry_key=""
-  local filtered_path=""
-  local -a entries=()
-  local -a entry_keys=()
-
-  remaining="$path_value"
-
-  while [ -n "$remaining" ]; do
-    case "$remaining" in
-      *:*)
-        entry="${remaining%%:*}"
-        remaining="${remaining#*:}"
-        ;;
-      *)
-        entry="$remaining"
-        remaining=""
-        ;;
-    esac
-
-    entry="$(__tb_add_to_path_trim_line "$entry")"
-    entry_key="$entry"
-
-    if [ -z "$entry_key" ] || __tb_windows_path_is_windows_entry "$entry"; then
-      continue
-    fi
-
-    if ! __tb_add_to_path_array_contains "$entry_key" "${entry_keys[@]}"; then
-      entries+=("$entry")
-      entry_keys+=("$entry_key")
-    fi
-  done
-
-  for entry in "${entries[@]}"; do
-    filtered_path+="${filtered_path:+:}${entry}"
-  done
-
-  printf '%s\n' "$filtered_path"
-}
-
-__tb_windows_path_merge_cached_entries() {
-  local current_path="$1"
-  local cached_path="$2"
-  local remaining=""
-  local entry=""
-  local entry_key=""
-  local merged_path=""
-  local -a entries=()
-  local -a entry_keys=()
-
-  remaining="$current_path"
-
-  while [ -n "$remaining" ]; do
-    case "$remaining" in
-      *:*)
-        entry="${remaining%%:*}"
-        remaining="${remaining#*:}"
-        ;;
-      *)
-        entry="$remaining"
-        remaining=""
-        ;;
-    esac
-
-    entry="$(__tb_add_to_path_trim_line "$entry")"
-    entry_key="$(__tb_windows_path_compare_key "$entry")"
-
-    [ -n "$entry_key" ] || continue
-
-    if ! __tb_add_to_path_array_contains "$entry_key" "${entry_keys[@]}"; then
-      entries+=("$entry")
-      entry_keys+=("$entry_key")
-    fi
-  done
-
-  remaining="$cached_path"
-
-  while [ -n "$remaining" ]; do
-    case "$remaining" in
-      *:*)
-        entry="${remaining%%:*}"
-        remaining="${remaining#*:}"
-        ;;
-      *)
-        entry="$remaining"
-        remaining=""
-        ;;
-    esac
-
-    entry="$(__tb_add_to_path_trim_line "$entry")"
-    entry_key="$(__tb_windows_path_normalize_entry_key "$entry")"
-
-    if [ -z "$entry_key" ] || ! __tb_windows_path_is_windows_entry "$entry"; then
-      continue
-    fi
-
-    if ! __tb_add_to_path_array_contains "$entry_key" "${entry_keys[@]}"; then
-      entries+=("$entry")
-      entry_keys+=("$entry_key")
-    fi
-  done
-
-  for entry in "${entries[@]}"; do
-    merged_path+="${merged_path:+:}${entry}"
-  done
-
-  printf '%s\n' "$merged_path"
 }
 
 __tb_windows_shim_target_name() {
@@ -564,7 +351,6 @@ __tb_windows_shim_refresh() {
   local line=""
   local command_name=""
   local shim_target=""
-  local previous_target=""
   local -a previous_commands=()
   local -a tracked_commands=()
 
@@ -575,8 +361,8 @@ __tb_windows_shim_refresh() {
   __tb_windows_ensure_sudo_wrapper || return 1
 
   if [ -f "$manifest_path" ]; then
-    while IFS=$'\t' read -r command_name previous_target || [ -n "$command_name" ]; do
-      command_name="$(__tb_add_to_path_normalize_command_name "$command_name")"
+    while IFS= read -r line || [ -n "$line" ]; do
+      command_name="$(__tb_add_to_path_normalize_command_name "$line")"
 
       if [ -n "$command_name" ] && ! __tb_add_to_path_array_contains "$command_name" "${previous_commands[@]}"; then
         previous_commands+=("$command_name")
@@ -607,92 +393,10 @@ __tb_windows_shim_refresh() {
     fi
 
     __tb_windows_shim_write_variants "$command_name" "$shim_target" || return 1
-    printf '%s\t%s\n' "$command_name" "$shim_target" >> "$temporary_path" || return 1
+    printf '%s\n' "$command_name" >> "$temporary_path" || return 1
   done
 
   mv "$temporary_path" "$manifest_path"
-}
-
-__tb_windows_shim_repair_missing_from_manifest() {
-  local command_name=""
-  local shim_target=""
-  local unresolved_any="0"
-
-  [ "$#" -gt 0 ] || return 0
-
-  mkdir -p "$TBDIR/bin"
-  __tb_windows_ensure_sudo_wrapper || return 1
-
-  for command_name in "$@"; do
-    shim_target="$(__tb_windows_shim_manifest_read_target "$command_name")"
-
-    if [ -z "$shim_target" ] || [ ! -e "$shim_target" ]; then
-      unresolved_any="1"
-      continue
-    fi
-
-    __tb_windows_shim_write_variants "$command_name" "$shim_target" || return 1
-  done
-
-  if [ "$unresolved_any" = "1" ]; then
-    return 2
-  fi
-}
-
-__tb_windows_shim_refresh_from_cache_if_needed() {
-  local shim_file=""
-  local line=""
-  local command_name=""
-  local shim_target=""
-  local expected_extension=""
-  local repair_result="0"
-  local -a missing_commands=()
-
-  shim_file="$(__tb_windows_shim_list_path)"
-
-  __tb_windows_path_load_cache
-  [ -n "$__tb_windows_cached_path" ] || return 0
-
-  if [ ! -s "$shim_file" ]; then
-    return 0
-  fi
-
-  while IFS= read -r line || [ -n "$line" ]; do
-    command_name="$(__tb_add_to_path_normalize_command_name "$line")"
-
-    case "$command_name" in
-      ''|'#'*) continue ;;
-    esac
-
-    shim_target="$(__tb_windows_shim_manifest_read_target "$command_name")"
-    expected_extension=""
-
-    case "$shim_target" in
-      *.exe) expected_extension='exe' ;;
-      *.cmd) expected_extension='cmd' ;;
-      *.bat) expected_extension='bat' ;;
-    esac
-
-    if [ ! -f "$TBDIR/bin/$command_name" ]; then
-      missing_commands+=("$command_name")
-      continue
-    fi
-
-    if [ -n "$expected_extension" ] && [ ! -f "$TBDIR/bin/$command_name.$expected_extension" ]; then
-      missing_commands+=("$command_name")
-    fi
-  done < "$shim_file"
-
-  if [ "${#missing_commands[@]}" -gt 0 ]; then
-    __tb_windows_shim_repair_missing_from_manifest "${missing_commands[@]}"
-    repair_result="$?"
-
-    case "$repair_result" in
-      0) ;;
-      2) return 2 ;;
-      *) return 1 ;;
-    esac
-  fi
 }
 
 __tb_windows_path_cache_loaded="0"
@@ -701,7 +405,6 @@ __tb_windows_cached_path=""
 __tb_windows_path_load_cache() {
   local cache_path=""
   local first_line=""
-  local original_path="$PATH"
 
   if [ "${__tb_windows_path_cache_loaded:-0}" = "1" ]; then
     return 0
@@ -718,53 +421,19 @@ __tb_windows_path_load_cache() {
   IFS= read -r first_line < "$cache_path" || return 0
 
   case "$first_line" in
-    __tb_windows_cached_path=*|export\ PATH=*) source "$cache_path" ;;
+    __tb_windows_cached_path=*) source "$cache_path" ;;
     *) return 0 ;;
   esac
-
-  case "$first_line" in
-    __tb_windows_cached_path=*) ;;
-    *)
-      if [ -n "$__tb_windows_cached_path" ]; then
-        __tb_windows_cached_path="$(__tb_windows_path_filter_windows_entries "$__tb_windows_cached_path")"
-      else
-        __tb_windows_cached_path="$(__tb_windows_path_filter_windows_entries "$PATH")"
-      fi
-
-      PATH="$original_path"
-      ;;
-  esac
-}
-
-__tb_windows_path_convert_windows_entry() {
-  local entry="$1"
-  local converted_entry=""
-
-  converted_entry="$(wslpath -u "$entry" 2>/dev/null || true)"
-
-  if [ -n "$converted_entry" ]; then
-    printf '%s\n' "$converted_entry"
-    return 0
-  fi
-
-  if typeset -f udir >/dev/null 2>&1; then
-    udir "$entry"
-    return 0
-  fi
-
-  return 1
 }
 
 __tb_windows_path_collect_windows_entries() {
-  local cmd_executable=""
   local windows_path=""
   local remaining=""
   local entry=""
   local converted_entry=""
   local -a entries=()
 
-  cmd_executable="$(__tb_windows_cmd_executable)" || return 0
-  windows_path="$("$cmd_executable" /d /c echo %PATH% 2>/dev/null | tr -d '\r')"
+  windows_path="$(cmd.exe /d /c echo %PATH% 2>/dev/null | tr -d '\r')"
   remaining="$windows_path"
 
   while [ -n "$remaining" ]; do
@@ -782,7 +451,7 @@ __tb_windows_path_collect_windows_entries() {
     entry="$(__tb_add_to_path_trim_line "$entry")"
     [ -n "$entry" ] || continue
 
-    converted_entry="$(__tb_windows_path_convert_windows_entry "$entry")"
+    converted_entry="$(udir "$entry")"
     [ -d "$converted_entry" ] || continue
 
     if ! __tb_add_to_path_array_contains "$converted_entry" "${entries[@]}"; then
@@ -795,10 +464,34 @@ __tb_windows_path_collect_windows_entries() {
   fi
 }
 
-__tb_windows_path_build_cache() {
+__tb_windows_path_build_merged_path() {
+  local current_path="$PATH"
+  local remaining=""
+  local entry=""
   local line=""
-  local cached_path=""
+  local merged_path=""
   local -a entries=()
+
+  remaining="$current_path"
+
+  while [ -n "$remaining" ]; do
+    case "$remaining" in
+      *:*)
+        entry="${remaining%%:*}"
+        remaining="${remaining#*:}"
+        ;;
+      *)
+        entry="$remaining"
+        remaining=""
+        ;;
+    esac
+
+    [ -n "$entry" ] || continue
+
+    if ! __tb_add_to_path_array_contains "$entry" "${entries[@]}"; then
+      entries+=("$entry")
+    fi
+  done
 
   while IFS= read -r line; do
     [ -n "$line" ] || continue
@@ -808,91 +501,21 @@ __tb_windows_path_build_cache() {
     fi
   done < <(__tb_windows_path_collect_windows_entries)
 
-  for line in "${entries[@]}"; do
-    cached_path+="${cached_path:+:}${line}"
+  for entry in "${entries[@]}"; do
+    merged_path+="${merged_path:+:}${entry}"
   done
 
-  printf '%s\n' "$cached_path"
+  printf '%s\n' "$merged_path"
 }
 
 __tb_windows_path_apply_startup_cache() {
   local startup_cache=""
-  local original_path="$PATH"
-  local cached_path=""
-  local first_line=""
-  local rewrite_startup_cache="0"
 
+  __tb_windows_ensure_sudo_wrapper || return 1
   startup_cache="$(__tb_windows_path_startup_cache_path)"
   [ -f "$startup_cache" ] || return 1
 
-  IFS= read -r first_line < "$startup_cache" || return 1
-
   source "$startup_cache"
-
-  case "$first_line" in
-    __tb_windows_cached_path=*) cached_path="$__tb_windows_cached_path" ;;
-    *)
-      rewrite_startup_cache="1"
-
-      if [ -n "$__tb_windows_cached_path" ]; then
-        cached_path="$(__tb_windows_path_filter_windows_entries "$__tb_windows_cached_path")"
-      else
-        cached_path="$(__tb_windows_path_filter_windows_entries "$PATH")"
-      fi
-
-      PATH="$original_path"
-      ;;
-  esac
-
-  [ -n "$cached_path" ] || return 1
-
-  __tb_windows_cached_path="$cached_path"
-  __tb_windows_path_cache_loaded="1"
-  __tb_windows_path_apply_loaded_cache "$original_path"
-
-  if [ "$rewrite_startup_cache" = "1" ]; then
-    __tb_windows_path_write_startup_cache >/dev/null 2>&1 || true
-  fi
-}
-
-__tb_windows_path_apply_loaded_cache() {
-  local original_path="${1:-$PATH}"
-  local linux_path=""
-  local -a cached_path_parts=()
-  local -a linux_path_parts=()
-
-  [ -n "$__tb_windows_cached_path" ] || return 1
-
-  if [ -n "${ZSH_VERSION:-}" ]; then
-    cached_path_parts=("${(@s/:/)__tb_windows_cached_path}")
-    linux_path_parts=("${(@)path:#/mnt/[[:alpha:]]/*}")
-    path=("${linux_path_parts[@]}" "${cached_path_parts[@]}")
-    export PATH
-    return 0
-  fi
-
-  linux_path="$(__tb_windows_path_filter_non_windows_entries "$original_path")"
-  PATH="$(__tb_windows_path_merge_cached_entries "$linux_path" "$__tb_windows_cached_path")"
-  export PATH
-}
-
-__tb_windows_path_apply_best_available_cache() {
-  local original_path="$PATH"
-
-  if __tb_windows_path_apply_startup_cache; then
-    return 0
-  fi
-
-  __tb_windows_path_cache_loaded="0"
-  __tb_windows_path_load_cache
-
-  if [ -n "$__tb_windows_cached_path" ]; then
-    __tb_windows_path_apply_loaded_cache "$original_path" || return 1
-    __tb_windows_path_write_startup_cache || return 1
-    return 0
-  fi
-
-  return 1
 }
 
 __tb_windows_path_write_cache() {
@@ -910,18 +533,23 @@ __tb_windows_path_write_startup_cache() {
   local startup_cache=""
   local temporary_path=""
 
+  __tb_windows_path_load_cache
   startup_cache="$(__tb_windows_path_startup_cache_path)"
   temporary_path="${startup_cache}.tmp.$$"
 
   {
-    printf '__tb_windows_cached_path=%q\n' "$__tb_windows_cached_path"
+    printf '#!/bin/bash\n'
+
+    if [ -n "$__tb_windows_cached_path" ]; then
+      printf 'export PATH=%q\n' "$__tb_windows_cached_path"
+    fi
   } > "$temporary_path" || return 1
 
   mv "$temporary_path" "$startup_cache"
 }
 
 __tb_windows_path_refresh_cache() {
-  __tb_windows_cached_path="$(__tb_windows_path_build_cache)"
+  __tb_windows_cached_path="$(__tb_windows_path_build_merged_path)"
 
   if [ -z "$__tb_windows_cached_path" ]; then
     return 1
@@ -974,12 +602,8 @@ __tb_add_to_path() {
 
   __tb_windows_path_load_cache
 
-  if [ "$refresh_cache" = "1" ]; then
+  if [ "$refresh_cache" = "1" ] || [ -z "$__tb_windows_cached_path" ] || [ ! -f "$(__tb_windows_path_startup_cache_path)" ]; then
     __tb_windows_path_refresh_cache || return 1
-  elif ! __tb_windows_path_apply_best_available_cache; then
-    __tb_windows_path_refresh_cache || return 1
-  else
-    return 0
   fi
 
   __tb_windows_path_apply_startup_cache >/dev/null 2>&1 || true

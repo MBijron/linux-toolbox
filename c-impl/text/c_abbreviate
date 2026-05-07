@@ -15,7 +15,7 @@ c_abbreviate() {
         input="${input#?}"
 
         case "$char" in
-            [[:space:]-])
+            [[:space:].-])
                 take_next_character="1"
                 continue
                 ;;

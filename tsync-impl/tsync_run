@@ -1,0 +1,18 @@
+#!/bin/bash
+
+tsync_run() {
+    case "${1:-}" in
+        -h|--help|-help)
+            printf '%s\n' 'Usage: tsync'
+            return 0
+            ;;
+    esac
+
+    if [ "$#" -ne 0 ]; then
+        printf '%s\n' 'Usage: tsync' >&2
+        return 1
+    fi
+
+    tbi pull -r || return $?
+    tbi quick
+}
