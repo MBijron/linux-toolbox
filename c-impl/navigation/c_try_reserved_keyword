@@ -1,0 +1,59 @@
+#!/bin/bash
+
+c_try_reserved_keyword() {
+    local query="$1"
+    local open_in_code="$2"
+    local open_in_vs="$3"
+    local folder_name
+    local mount_path
+    local drive_name
+    local drive_input
+    local drive_list
+    local target_path
+    local -a available_drives=()
+
+    folder_name="$(c_reserved_keyword_folder_name "$query")" || return 2
+
+    while IFS= read -r mount_path; do
+        drive_name="${mount_path##*/}"
+        available_drives+=("$drive_name")
+        target_path="$mount_path/$folder_name"
+
+        if [[ -d "$target_path" ]]; then
+            c_open_path "$target_path" "$open_in_code" "$open_in_vs"
+            return $?
+        fi
+    done < <(c_list_local_mnt_mounts)
+
+    if [[ "${#available_drives[@]}" -eq 0 ]]; then
+        echo "Error: no eligible local drives were found under /mnt." >&2
+        return 1
+    fi
+
+    drive_list="${available_drives[*]}"
+    printf 'Reserved folder "%s" was not found. Available drives: %s\n' "$folder_name" "$drive_list" >&2
+
+    while true; do
+        printf 'Create /mnt/<drive>/%s? Enter drive letter or press Enter to cancel: ' "$folder_name" >&2
+        if ! IFS= read -r drive_input; then
+            return 1
+        fi
+
+        drive_input="${drive_input,,}"
+
+        if [[ -z "$drive_input" ]]; then
+            return 1
+        fi
+
+        for drive_name in "${available_drives[@]}"; do
+            if [[ "$drive_input" == "$drive_name" ]]; then
+                target_path="/mnt/$drive_input/$folder_name"
+                mkdir -p "$target_path" || return 1
+                c_open_path "$target_path" "$open_in_code" "$open_in_vs"
+                return $?
+            fi
+        done
+
+        printf 'Invalid drive. Choose one of: %s, or press Enter to cancel.\n' "$drive_list" >&2
+    done
+}

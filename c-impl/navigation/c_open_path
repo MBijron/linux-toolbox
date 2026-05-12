@@ -1,0 +1,22 @@
+#!/bin/bash
+
+c_open_path() {
+    local target_path="$1"
+    local open_in_code="$2"
+    local open_in_vs="$3"
+
+    if [[ -z "$target_path" ]]; then
+        echo "Error: destination path is empty." >&2
+        return 1
+    fi
+
+    if [[ "$open_in_code" == "1" ]]; then
+        code "$target_path" || return 1
+    elif [[ "$open_in_vs" == "1" ]]; then
+        vs "$target_path" || return 1
+    else
+        cd "$target_path" || return 1
+    fi
+
+    return 0
+}

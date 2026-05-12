@@ -9,6 +9,7 @@
 ## Repository navigation
 
 - `c` is the repository chooser. It builds a top-level directory map from configured roots in `c-impl/discovery/` and enriches it with hard-coded entries.
+- `c` also reserves the exact queries `local` and `repos` to jump straight to `/mnt/*/localrepo` and `/mnt/*/repos`; when the folder does not exist on any eligible `/mnt/*` drive, it reuses the local-drive discovery rules to prompt for a drive, creates the folder, and then opens it.
 - `c-impl/models/c_repo_map_entry_create` normalizes each discovered folder into a display name and abbreviation.
 - `c-impl/text/c_abbreviate` generates abbreviations from folder names and treats dots like other word separators.
 - `xgit_bin/git_worktree` now creates worktrees under sibling container folders named `<repo>.worktrees/<branch-tail>`, using only the last branch path segment for the worktree directory name.

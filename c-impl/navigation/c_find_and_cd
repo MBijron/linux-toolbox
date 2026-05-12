@@ -6,10 +6,22 @@ c_find_and_cd() {
     local query="$3"
     local preferred_index="$4"
     local results
+    local reserved_keyword_status
 
     if [[ -z "$query" ]]; then
         echo "Usage: c [-c|-v] <query> [preferred-index]"
         return 1
+    fi
+
+    c_try_reserved_keyword "$query" "$open_in_code" "$open_in_vs"
+    reserved_keyword_status="$?"
+
+    if [[ "$reserved_keyword_status" -eq 0 ]]; then
+        return 0
+    fi
+
+    if [[ "$reserved_keyword_status" -ne 2 ]]; then
+        return "$reserved_keyword_status"
     fi
 
     results="$(c_filter_by_abbreviation "$query")"

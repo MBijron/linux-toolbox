@@ -30,8 +30,11 @@
 - `filtering/c_filter_by_abbreviation_text`: partial shortcut match.
 - `filtering/c_filter_by_folder_text`: partial folder-name match.
 - `navigation/c_find_and_cd`: search flow entrypoint after arg parsing.
+- `navigation/c_open_path`: applies the chosen destination with `cd`, `code`, or `vs`.
+- `navigation/c_reserved_keyword_folder_name`: maps reserved `c` keywords like `local` and `repos` to their root folder names.
+- `navigation/c_try_reserved_keyword`: handles reserved keyword navigation and the interactive create-folder fallback for missing `repos` roots.
 - `navigation/c_choose_path`: selects a repo path from c results, including interactive disambiguation.
 - `navigation/c_choose_and_cd`: multi-match prompt and destination action.
-- `presentation/c_print_repo_map`: colored repo list output, including worktree badges and ticket suffix lines.
+- `presentation/c_print_repo_map`: colored repo list output, including reserved keyword hints, worktree badges, and ticket suffix lines.
 - `text/c_abbreviate`: builds shortcuts from folder names.
 - `text/c_worktree_entry_metadata`: extracts worktree branch subtitles, base repo names, and special shortcuts like `c9666` from both legacy `.worktree.*` folders and the current flat `<repo>.worktrees/<branch-tail>` layout.

@@ -21,13 +21,5 @@ c_choose_and_cd() {
 
     chosen_path="$(c_choose_path "$results" "$preferred_index")" || return 1
 
-    if [[ "$open_in_code" == "1" ]]; then
-        code "$chosen_path" || return 1
-    elif [[ "$open_in_vs" == "1" ]]; then
-        vs "$chosen_path" || return 1
-    else
-        cd "$chosen_path" || return 1
-    fi
-
-    return 0
+    c_open_path "$chosen_path" "$open_in_code" "$open_in_vs"
 }

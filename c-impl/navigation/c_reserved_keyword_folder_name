@@ -1,0 +1,16 @@
+#!/bin/bash
+
+c_reserved_keyword_folder_name() {
+    case "$1" in
+        local)
+            printf '%s\n' 'localrepo'
+            return 0
+            ;;
+        repos)
+            printf '%s\n' 'repos'
+            return 0
+            ;;
+    esac
+
+    return 1
+}

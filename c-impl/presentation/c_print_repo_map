@@ -6,6 +6,8 @@ c_print_repo_map() {
     local color_name=""
     local color_archive_name=""
     local color_ticket=""
+    local color_reserved_label=""
+    local color_reserved_keyword=""
     local color_reset=""
     local active_name_color
     local ticket_metadata
@@ -23,8 +25,15 @@ c_print_repo_map() {
         color_name=$'\033[0;37m'
         color_archive_name=$'\033[0;90m'
         color_ticket=$'\033[0;90m'
+        color_reserved_label=$'\033[0;90m'
+        color_reserved_keyword=$'\033[1;33m'
         color_reset=$'\033[0m'
     fi
+
+    printf '%breserved:%b %b[local]%b %b[repos]%b\n' \
+        "$color_reserved_label" "$color_reset" \
+        "$color_reserved_keyword" "$color_reset" \
+        "$color_reserved_keyword" "$color_reset"
 
     c_read_repo_map_cache | while IFS=$'\t' read -r repo_path folder_name abbreviation; do
         active_name_color="$color_name"
