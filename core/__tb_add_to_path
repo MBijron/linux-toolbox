@@ -464,42 +464,37 @@ __tb_windows_path_collect_windows_entries() {
   fi
 }
 
-__tb_windows_path_build_merged_path() {
-  local current_path="$PATH"
+__tb_windows_path_merge_paths() {
+  local current_path="$1"
+  local additional_path="$2"
   local remaining=""
   local entry=""
-  local line=""
+  local path_value=""
   local merged_path=""
   local -a entries=()
 
-  remaining="$current_path"
+  for path_value in "$current_path" "$additional_path"; do
+    remaining="$path_value"
 
-  while [ -n "$remaining" ]; do
-    case "$remaining" in
-      *:*)
-        entry="${remaining%%:*}"
-        remaining="${remaining#*:}"
-        ;;
-      *)
-        entry="$remaining"
-        remaining=""
-        ;;
-    esac
+    while [ -n "$remaining" ]; do
+      case "$remaining" in
+        *:*)
+          entry="${remaining%%:*}"
+          remaining="${remaining#*:}"
+          ;;
+        *)
+          entry="$remaining"
+          remaining=""
+          ;;
+      esac
 
-    [ -n "$entry" ] || continue
+      [ -n "$entry" ] || continue
 
-    if ! __tb_add_to_path_array_contains "$entry" "${entries[@]}"; then
-      entries+=("$entry")
-    fi
+      if ! __tb_add_to_path_array_contains "$entry" "${entries[@]}"; then
+        entries+=("$entry")
+      fi
+    done
   done
-
-  while IFS= read -r line; do
-    [ -n "$line" ] || continue
-
-    if ! __tb_add_to_path_array_contains "$line" "${entries[@]}"; then
-      entries+=("$line")
-    fi
-  done < <(__tb_windows_path_collect_windows_entries)
 
   for entry in "${entries[@]}"; do
     merged_path+="${merged_path:+:}${entry}"
@@ -508,12 +503,39 @@ __tb_windows_path_build_merged_path() {
   printf '%s\n' "$merged_path"
 }
 
+__tb_windows_path_build_cached_path() {
+  local line=""
+  local cached_path=""
+
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    cached_path+="${cached_path:+:}${line}"
+  done < <(__tb_windows_path_collect_windows_entries)
+
+  printf '%s\n' "$cached_path"
+}
+
 __tb_windows_path_apply_startup_cache() {
   local startup_cache=""
+  local first_line=""
+  local second_line=""
 
   __tb_windows_ensure_sudo_wrapper || return 1
   startup_cache="$(__tb_windows_path_startup_cache_path)"
   [ -f "$startup_cache" ] || return 1
+
+  IFS= read -r first_line < "$startup_cache" || return 1
+  IFS= read -r second_line < <(sed -n '2p' "$startup_cache") || true
+
+  case "$first_line" in
+    '#!/bin/bash') ;;
+    *) return 1 ;;
+  esac
+
+  case "$second_line" in
+    __tb_windows_cached_path=*) ;;
+    *) return 1 ;;
+  esac
 
   source "$startup_cache"
 }
@@ -539,17 +561,17 @@ __tb_windows_path_write_startup_cache() {
 
   {
     printf '#!/bin/bash\n'
-
-    if [ -n "$__tb_windows_cached_path" ]; then
-      printf 'export PATH=%q\n' "$__tb_windows_cached_path"
-    fi
+    printf '__tb_windows_cached_path=%q\n' "$__tb_windows_cached_path"
+    printf 'if [ -n "$__tb_windows_cached_path" ] && typeset -f __tb_windows_path_merge_paths >/dev/null 2>&1; then\n'
+    printf '  export PATH="$(__tb_windows_path_merge_paths "$PATH" "$__tb_windows_cached_path")"\n'
+    printf 'fi\n'
   } > "$temporary_path" || return 1
 
   mv "$temporary_path" "$startup_cache"
 }
 
 __tb_windows_path_refresh_cache() {
-  __tb_windows_cached_path="$(__tb_windows_path_build_merged_path)"
+  __tb_windows_cached_path="$(__tb_windows_path_build_cached_path)"
 
   if [ -z "$__tb_windows_cached_path" ]; then
     return 1

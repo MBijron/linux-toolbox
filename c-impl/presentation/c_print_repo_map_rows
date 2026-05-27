@@ -1,0 +1,86 @@
+#!/bin/bash
+
+c_print_repo_map_rows() {
+    local rows="$1"
+    local number_rows="$2"
+    local color_index=""
+    local color_abbr=""
+    local color_worktree_badge=""
+    local color_name=""
+    local color_archive_name=""
+    local color_ticket=""
+    local color_reset=""
+    local active_name_color
+    local ticket_metadata
+    local ticket_segment
+    local unused_ticket_abbreviation
+    local unused_base_name
+    local name_column
+    local raw_folder_name
+    local name_label
+    local prefix_label
+    local prefix_width
+    local prefix_column_width
+    local row_number=0
+    local repo_path
+    local folder_name
+    local abbreviation
+
+    if [[ "$number_rows" != "1" ]]; then
+        number_rows="0"
+    fi
+
+    if [[ -t 1 ]]; then
+        color_index=$'\033[1;32m'
+        color_abbr=$'\033[1;36m'
+        color_worktree_badge=$'\033[0;33m'
+        color_name=$'\033[0;37m'
+        color_archive_name=$'\033[0;90m'
+        color_ticket=$'\033[0;90m'
+        color_reset=$'\033[0m'
+    fi
+
+    while IFS=$'\t' read -r repo_path folder_name abbreviation; do
+        if [[ -z "$repo_path" && -z "$folder_name" && -z "$abbreviation" ]]; then
+            continue
+        fi
+
+        row_number=$((row_number + 1))
+        active_name_color="$color_name"
+        ticket_segment=""
+        raw_folder_name="${repo_path##*/}"
+        name_label="$folder_name"
+        prefix_label=""
+        prefix_width=0
+        prefix_column_width=0
+
+        if [[ "$folder_name" == "archive" && "$abbreviation" == "_" ]]; then
+            active_name_color="$color_archive_name"
+        fi
+
+        if ticket_metadata="$(c_worktree_entry_metadata "$repo_path" "$raw_folder_name" 2>/dev/null)"; then
+            IFS=$'\t' read -r ticket_segment unused_ticket_abbreviation unused_base_name <<< "$ticket_metadata"
+            name_label="${color_worktree_badge}[w]${color_reset} ${active_name_color}${folder_name}"
+        fi
+
+        if [[ "$number_rows" == "1" ]]; then
+            prefix_label="${row_number})"
+            prefix_width=${#prefix_label}
+            prefix_column_width=$(( ((prefix_width / 8) + 1) * 8 ))
+            printf '%b%s%b\t' "$color_index" "$prefix_label" "$color_reset"
+        fi
+
+        printf '%b%s%b\t%b%s\n' \
+            "$color_abbr" "$abbreviation" "$color_reset" \
+            "$active_name_color" "$name_label$color_reset"
+
+        if [[ -n "$ticket_segment" ]]; then
+            name_column=$(( (${#abbreviation} / 8) + 1 ))
+            name_column=$(( name_column * 8 ))
+            name_column=$(( name_column + 4 + prefix_column_width ))
+            printf '%*s%b%s%b\n' \
+                "$name_column" '' \
+                "$color_ticket" "$ticket_segment" "$color_reset"
+        fi
+    done <<< "$rows"
+}

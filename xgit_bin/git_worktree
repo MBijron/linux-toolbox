@@ -136,6 +136,7 @@ git_worktree() {
             fi
 
             echo "Created worktree: $target_path"
+            git_worktree_sync_vs_settings "$main_repo_root" "$target_path" || return 1
             ;;
         remove)
             shift || true
@@ -422,6 +423,38 @@ git_worktree_prepare_git_repo_path() {
     fi
 
     printf '%s' "$target_path"
+}
+
+git_worktree_sync_vs_settings() {
+    local main_repo_root="$1"
+    local target_path="$2"
+    local source_vs_path="${main_repo_root}/src/.vs"
+    local target_src_dir="${target_path}/src"
+    local target_vs_path="${target_src_dir}/.vs"
+
+    if [[ ! -d "$source_vs_path" ]]; then
+        printf 'Skipped src/.vs sync: source folder not found: %s\n' "$source_vs_path"
+        return 0
+    fi
+
+    if ! mkdir -p "$target_src_dir"; then
+        printf 'Error: Failed to prepare worktree src folder for .vs sync: %s\n' "$target_src_dir" >&2
+        return 1
+    fi
+
+    if ! rm -rf "$target_vs_path"; then
+        printf 'Error: Failed to remove existing worktree .vs folder: %s\n' "$target_vs_path" >&2
+        return 1
+    fi
+
+    if ! cp -R "$source_vs_path" "$target_src_dir/"; then
+        printf 'Error: Failed to copy main repo .vs folder from %s to %s\n' "$source_vs_path" "$target_vs_path" >&2
+        return 1
+    fi
+
+    printf '%s\n' 'Synced src/.vs from main repo to new worktree:'
+    printf '  from: %s\n' "$source_vs_path"
+    printf '  to:   %s\n' "$target_vs_path"
 }
 
 git_worktree_remove_empty_parents() {

@@ -36,5 +36,6 @@
 - `navigation/c_choose_path`: selects a repo path from c results, including interactive disambiguation.
 - `navigation/c_choose_and_cd`: multi-match prompt and destination action.
 - `presentation/c_print_repo_map`: colored repo list output, including reserved keyword hints, worktree badges, and ticket suffix lines.
+- `presentation/c_print_repo_map_rows`: shared row formatter for both the main repo list and numbered multi-match chooser output.
 - `text/c_abbreviate`: builds shortcuts from folder names.
 - `text/c_worktree_entry_metadata`: extracts worktree branch subtitles, base repo names, and special shortcuts like `c9666` from both legacy `.worktree.*` folders and the current flat `<repo>.worktrees/<branch-tail>` layout.

@@ -16,7 +16,7 @@
 - `c-impl/text/c_worktree_entry_metadata` detects both legacy `.worktree.*` folders and the current flat `<repo>.worktrees/<branch-tail>` layout, derives special shortcuts such as `c9666` from ticket prefixes like `CUAC-9666`, and falls back to a truncated regular abbreviation for non-ticket worktree branches.
 - `c-impl/models/c_repo_map_entry_create` stores the base repo name for worktree rows so `c` shows the repository name instead of the full worktree path.
 - `c-impl/models/c_repo_map_entry_sort_by_modified_time` places worktrees after normal repos and still keeps `archive` entries last.
-- `c-impl/presentation/c_print_repo_map` and `c-impl/navigation/c_choose_path` render worktree entries with a dim yellow `[w]` badge and show the ticket suffix in dim text under the repository name.
+- `c-impl/presentation/c_print_repo_map_rows` is the shared row renderer used by both `c-impl/presentation/c_print_repo_map` and `c-impl/navigation/c_choose_path`, so the numbered disambiguation list matches the normal `c` output apart from its colored numeric prefix.
 - `c` persists its repo map in a versioned cache file so representation changes like the worktree display rewrite do not keep serving stale rows from older cache formats.
 - `c-impl/cache/c_read_repo_map_cache` rebuilds that cache on demand when the current versioned cache file does not exist, is empty, or is older than the active `c` implementation files, so display and sort changes take effect without manual cache cleanup.
 - `c --force` forces a repo-map rebuild before continuing with normal listing or lookup behavior.
@@ -30,4 +30,9 @@
 - `xgit_bin/git_worktree` resolves `xgit w remove <text>` against linked worktree paths from `git worktree list --porcelain`, normalizes Windows/UNC paths back to WSL paths, and explicitly excludes the main repository entry; it blocks removal when the worktree is dirty or ahead of its upstream, and when no upstream is configured it compares against `origin/<branch>` before falling back to broader remote containment checks. After those checks and the `y/N` confirmation, removal always uses `git worktree remove --force` so the worktree directory is deleted recursively; `xgit w remove --force <text>` now changes only the safety-check bypass behavior.
 - `xgit_bin/git_worktree` prefers the native Linux `git` binary for worktree operations so Windows-mounted repositories do not hit `git.exe` path-length limits during checkout.
 - `xgit_bin/git_worktree` refreshes the `c` repo-map cache after successful add/remove operations so new worktrees are immediately searchable.
+- `xgit_bin/git_worktree` finishes successful `xgit w checkout` runs by replacing `<worktree>/src/.vs` with a copy of `<main-repo>/src/.vs` when that source folder exists, and prints the sync source and destination paths clearly in the terminal.
 - When a helper must fall back to `git.exe` for a path argument on `/mnt/*`, it should convert the WSL path before invoking Git.
+
+## Repository skills
+
+- `.github/skills/windows-path-cache/SKILL.md` - Read when Windows wrapper commands such as `winwhere` disappear on startup or `/toolbox/bin` drops out of `PATH` after the Windows path cache is applied.
