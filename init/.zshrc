@@ -261,31 +261,14 @@ __tb_lazy_expand_or_complete() {
   zle expand-or-complete
 }
 
-__tb_cancel_prompt_input() {
-  BUFFER=""
-  CURSOR=0
-  zle -I
-  zle reset-prompt
-}
-
 __tb_prepare_omz_cache
 __tb_omz_lite_load
 
 zle -N __tb_lazy_expand_or_complete
-zle -N __tb_cancel_prompt_input
 bindkey '^I' __tb_lazy_expand_or_complete
 bindkey -M emacs '^I' __tb_lazy_expand_or_complete
 bindkey -M viins '^I' __tb_lazy_expand_or_complete
 bindkey -M vicmd '^I' __tb_lazy_expand_or_complete
-
-TRAPINT() {
-  if zle; then
-    zle __tb_cancel_prompt_input
-    return 0
-  fi
-
-  return 130
-}
 
 # User configuration
 
