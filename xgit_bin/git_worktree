@@ -8,8 +8,8 @@ git_worktree() {
     local common_git_dir
     local main_repo_root
     local parent_dir
-    local repo_dir_name
     local worktrees_dir
+    local metadata_path
     local branch_name
     local branch_dir_name
     local target_input
@@ -30,15 +30,20 @@ git_worktree() {
     repo_root="$(git rev-parse --path-format=absolute --show-toplevel 2>/dev/null || git rev-parse --show-toplevel 2>/dev/null)" || return 1
     common_git_dir="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null || git rev-parse --git-common-dir 2>/dev/null)" || return 1
 
+    repo_root="$(git_worktree_normalize_local_path "$repo_root")"
+    common_git_dir="$(git_worktree_normalize_local_path "$common_git_dir")"
+
     if [[ "$common_git_dir" == */.git ]]; then
         main_repo_root="${common_git_dir%/.git}"
     else
         main_repo_root="$repo_root"
     fi
 
+    main_repo_root="$(git_worktree_normalize_local_path "$main_repo_root")"
+
     parent_dir="${main_repo_root%/*}"
-    repo_dir_name="${main_repo_root##*/}"
-    worktrees_dir="${parent_dir}/${repo_dir_name}.worktrees"
+    worktrees_dir="${parent_dir}/.w"
+    metadata_path="$(git_worktree_metadata_path "$worktrees_dir")"
 
     case "$subcommand" in
         checkout)
@@ -70,10 +75,9 @@ git_worktree() {
                 fi
             fi
 
-            branch_dir_name="${branch_name##*/}"
-
-            if [[ -z "$branch_dir_name" ]]; then
-                echo "Error: Branch '$branch_name' does not produce a valid worktree directory name."
+            if branch_dir_name="$(git_worktree_resolve_directory_name "$worktrees_dir" "$metadata_path" "$main_repo_root" "$branch_name")"; then
+                :
+            else
                 return 1
             fi
 
@@ -131,6 +135,10 @@ git_worktree() {
                 fi
             fi
 
+            if ! git_worktree_metadata_upsert "$metadata_path" "$main_repo_root" "$branch_name" "$branch_dir_name"; then
+                git_worktree_print_red "Warning: Failed to update worktree metadata: $metadata_path"
+            fi
+
             if command -v c_update_repo_map_cache >/dev/null 2>&1; then
                 c_update_repo_map_cache >/dev/null 2>&1 || true
             fi
@@ -156,7 +164,7 @@ git_worktree() {
             if [[ -d "$target_input" || "$target_input" == /* || "$target_input" == ./* || "$target_input" == ../* ]]; then
                 target_path="$target_input"
             else
-                target_path="$(git_worktree_resolve_remove_path "$main_repo_root" "$target_input")" || return 1
+                target_path="$(git_worktree_resolve_remove_path "$metadata_path" "$main_repo_root" "$target_input")" || return 1
             fi
 
             target_path="$(git_worktree_normalize_local_path "$target_path")"
@@ -170,6 +178,8 @@ git_worktree() {
                 echo "Error: Worktree path does not exist: $target_path"
                 return 1
             fi
+
+            branch_name="$(git_worktree_resolve_branch_name_for_path "$metadata_path" "$main_repo_root" "$target_path")"
 
             if [[ "$force_remove" != "1" ]]; then
                 if git_worktree_has_uncommitted_changes "$target_path"; then
@@ -204,6 +214,7 @@ git_worktree() {
 
             git -c core.longpaths=true worktree remove --force "$git_target_path" || return 1
             git worktree prune >/dev/null 2>&1 || true
+            git_worktree_metadata_remove "$metadata_path" "$main_repo_root" "$branch_name" "${target_path##*/}" || true
             git_worktree_remove_empty_parents "${target_path%/*}" "$worktrees_dir"
 
             if command -v c_update_repo_map_cache >/dev/null 2>&1; then
@@ -245,37 +256,241 @@ git_worktree_resolve_branch_ref() {
     return 1
 }
 
-git_worktree_resolve_remove_path() {
-    local main_repo_root="$1"
-    local search_text="$2"
-    local lowered_search_text
-    local matched_paths
-    local match_count
+git_worktree_metadata_path() {
+    printf '%s/worktrees.tsv\n' "$1"
+}
 
-    lowered_search_text="$(git_worktree_to_lower "$search_text")"
-    main_repo_root="$(git_worktree_normalize_local_path "$main_repo_root")"
+git_worktree_resolve_directory_name() {
+    local worktrees_dir="$1"
+    local metadata_path="$2"
+    local repo_root="$3"
+    local branch_name="$4"
+    local preferred_name
+    local existing_name
+    local candidate_name
+    local suffix=2
 
-    matched_paths="$(git worktree list --porcelain | sed -n 's/^worktree //p' | while IFS= read -r candidate_path; do
-        candidate_path="$(git_worktree_normalize_local_path "$candidate_path")"
-        if [[ -n "$candidate_path" && "$candidate_path" != "$main_repo_root" ]]; then
-            printf '%s\n' "$candidate_path"
+    if [[ -z "$worktrees_dir" || -z "$repo_root" || -z "$branch_name" ]]; then
+        echo "Error: Missing worktree directory inputs." >&2
+        return 1
+    fi
+
+    existing_name="$(git_worktree_metadata_find_folder_by_branch "$metadata_path" "$repo_root" "$branch_name")"
+    if [[ -n "$existing_name" ]]; then
+        echo "Error: Branch '$branch_name' already has a worktree folder: ${worktrees_dir}/${existing_name}" >&2
+        return 1
+    fi
+
+    preferred_name="$(git_worktree_extract_ticket_folder_name "$branch_name")"
+    if [[ -z "$preferred_name" ]]; then
+        git_worktree_generate_loc_folder_name "$worktrees_dir" "$metadata_path"
+        return $?
+    fi
+
+    candidate_name="$preferred_name"
+    while git_worktree_folder_name_in_use "$worktrees_dir" "$metadata_path" "$candidate_name"; do
+        candidate_name="${preferred_name}-${suffix}"
+        suffix=$((suffix + 1))
+    done
+
+    printf '%s\n' "$candidate_name"
+}
+
+git_worktree_extract_ticket_folder_name() {
+    local branch_name="$1"
+    local branch_tail
+
+    branch_tail="${branch_name##*/}"
+    if [[ "$branch_tail" =~ ^([[:alpha:]]+-[0-9]+)($|-) ]]; then
+        if [[ -n "${BASH_VERSION-}" ]]; then
+            printf '%s\n' "${BASH_REMATCH[1]}"
+        elif [[ -n "${ZSH_VERSION-}" ]]; then
+            printf '%s\n' "$match[1]"
         fi
-    done | awk -v lowered_search_text="$lowered_search_text" 'index(tolower($0), lowered_search_text) > 0 { print }')"
+        return 0
+    fi
 
-    match_count="$(printf '%s\n' "$matched_paths" | awk 'NF { count++ } END { print count + 0 }')"
+    return 1
+}
 
-    if [[ "$match_count" -eq 0 ]]; then
+git_worktree_generate_loc_folder_name() {
+    local worktrees_dir="$1"
+    local metadata_path="$2"
+    local candidate_name
+    local random_number
+
+    while true; do
+        random_number="$(( ((RANDOM * 1000) + RANDOM + $$) % 900000 + 100000 ))"
+        candidate_name="LOC-${random_number}"
+        if ! git_worktree_folder_name_in_use "$worktrees_dir" "$metadata_path" "$candidate_name"; then
+            printf '%s\n' "$candidate_name"
+            return 0
+        fi
+    done
+}
+
+git_worktree_folder_name_in_use() {
+    local worktrees_dir="$1"
+    local metadata_path="$2"
+    local folder_name="$3"
+    local existing_record
+
+    if [[ -e "${worktrees_dir}/${folder_name}" ]]; then
+        return 0
+    fi
+
+    existing_record="$(git_worktree_metadata_find_by_folder "$metadata_path" "$folder_name")"
+    if [[ -n "$existing_record" ]]; then
+        return 0
+    fi
+
+    return 1
+}
+
+git_worktree_resolve_remove_path() {
+    local metadata_path="$1"
+    local main_repo_root="$2"
+    local search_text="$3"
+    local resolved_record
+    local folder_name
+
+    resolved_record="$(git_worktree_metadata_resolve_branch "$metadata_path" "$main_repo_root" "$search_text")" || return 1
+    folder_name="$(printf '%s\n' "$resolved_record" | awk -F '\t' 'NF {print $3; exit}')"
+
+    if [[ -z "$folder_name" ]]; then
         echo "Error: No worktree matched '$search_text'." >&2
         return 1
     fi
 
+    printf '%s/%s\n' "${metadata_path%/*}" "$folder_name"
+}
+
+git_worktree_resolve_branch_name_for_path() {
+    local metadata_path="$1"
+    local repo_root="$2"
+    local target_path="$3"
+    local folder_name
+
+    folder_name="${target_path##*/}"
+    git_worktree_metadata_find_branch_by_folder "$metadata_path" "$repo_root" "$folder_name"
+}
+
+git_worktree_metadata_read() {
+    local metadata_path="$1"
+
+    [[ -f "$metadata_path" ]] || return 1
+    awk -F '\t' 'NF >= 3 { print $1 FS $2 FS $3 }' "$metadata_path"
+}
+
+git_worktree_metadata_find_folder_by_branch() {
+    local metadata_path="$1"
+    local repo_root="$2"
+    local branch_name="$3"
+
+    git_worktree_metadata_read "$metadata_path" 2>/dev/null | awk -F '\t' -v repo="$repo_root" -v branch="$branch_name" '$1 == repo && $2 == branch { print $3; exit }'
+}
+
+git_worktree_metadata_find_branch_by_folder() {
+    local metadata_path="$1"
+    local repo_root="$2"
+    local folder_name="$3"
+
+    git_worktree_metadata_read "$metadata_path" 2>/dev/null | awk -F '\t' -v repo="$repo_root" -v folder="$folder_name" '$1 == repo && $3 == folder { print $2; exit }'
+}
+
+git_worktree_metadata_find_by_folder() {
+    local metadata_path="$1"
+    local folder_name="$2"
+
+    git_worktree_metadata_read "$metadata_path" 2>/dev/null | awk -F '\t' -v folder="$folder_name" '$3 == folder { print $0; exit }'
+}
+
+git_worktree_metadata_resolve_branch() {
+    local metadata_path="$1"
+    local repo_root="$2"
+    local search_text="$3"
+    local exact_matches
+    local tail_matches
+    local match_count
+
+    exact_matches="$(git_worktree_metadata_read "$metadata_path" 2>/dev/null | awk -F '\t' -v repo="$repo_root" -v query="$search_text" '$1 == repo && $2 == query { print $0 }')"
+    match_count="$(printf '%s\n' "$exact_matches" | awk 'NF { count++ } END { print count + 0 }')"
+    if [[ "$match_count" -eq 1 ]]; then
+        printf '%s\n' "$exact_matches" | awk 'NF { print; exit }'
+        return 0
+    fi
     if [[ "$match_count" -gt 1 ]]; then
-        echo "Error: Multiple worktrees matched '$search_text':" >&2
-        printf '%s\n' "$matched_paths" | sed 's/^/  /' >&2
+        echo "Error: Multiple worktrees matched '$search_text'." >&2
+        printf '%s\n' "$exact_matches" | awk -F '\t' 'NF { printf "  %s -> %s\n", $2, $3 }' >&2
         return 1
     fi
 
-    printf '%s\n' "$matched_paths" | awk 'NF { print; exit }'
+    tail_matches="$(git_worktree_metadata_read "$metadata_path" 2>/dev/null | awk -F '\t' -v repo="$repo_root" -v query="$search_text" '$1 == repo && ($2 ~ ("/" query "$") || $2 == query) { print $0 }')"
+    match_count="$(printf '%s\n' "$tail_matches" | awk 'NF { count++ } END { print count + 0 }')"
+    if [[ "$match_count" -eq 1 ]]; then
+        printf '%s\n' "$tail_matches" | awk 'NF { print; exit }'
+        return 0
+    fi
+    if [[ "$match_count" -gt 1 ]]; then
+        echo "Error: Multiple worktrees matched '$search_text'. Provide the full branch name." >&2
+        printf '%s\n' "$tail_matches" | awk -F '\t' 'NF { printf "  %s -> %s\n", $2, $3 }' >&2
+        return 1
+    fi
+
+    echo "Error: No worktree matched branch '$search_text'." >&2
+    return 1
+}
+
+git_worktree_metadata_upsert() {
+    local metadata_path="$1"
+    local repo_root="$2"
+    local branch_name="$3"
+    local folder_name="$4"
+    local metadata_dir
+    local temp_path
+
+    metadata_dir="${metadata_path%/*}"
+    temp_path="${metadata_path}.tmp.$$"
+
+    mkdir -p "$metadata_dir" || return 1
+
+    {
+        git_worktree_metadata_read "$metadata_path" 2>/dev/null | awk -F '\t' -v repo="$repo_root" -v branch="$branch_name" -v folder="$folder_name" 'BEGIN { OFS = FS } !($1 == repo && $2 == branch) && !($3 == folder) { print $0 }'
+        printf '%s\t%s\t%s\n' "$repo_root" "$branch_name" "$folder_name"
+    } > "$temp_path" || {
+        rm -f "$temp_path"
+        return 1
+    }
+
+    if ! mv "$temp_path" "$metadata_path"; then
+        rm -f "$temp_path"
+        return 1
+    fi
+
+    return 0
+}
+
+git_worktree_metadata_remove() {
+    local metadata_path="$1"
+    local repo_root="$2"
+    local branch_name="$3"
+    local folder_name="$4"
+    local temp_path
+
+    [[ -f "$metadata_path" ]] || return 0
+
+    temp_path="${metadata_path}.tmp.$$"
+    git_worktree_metadata_read "$metadata_path" 2>/dev/null | awk -F '\t' -v repo="$repo_root" -v branch="$branch_name" -v folder="$folder_name" 'BEGIN { OFS = FS } !($1 == repo && ($2 == branch || $3 == folder)) { print $0 }' > "$temp_path" || {
+        rm -f "$temp_path"
+        return 1
+    }
+
+    if ! mv "$temp_path" "$metadata_path"; then
+        rm -f "$temp_path"
+        return 1
+    fi
+
+    return 0
 }
 
 git_worktree_has_uncommitted_changes() {
@@ -428,6 +643,8 @@ git_worktree_prepare_git_repo_path() {
 git_worktree_sync_vs_settings() {
     local main_repo_root="$1"
     local target_path="$2"
+    main_repo_root="$(git_worktree_normalize_local_path "$main_repo_root")"
+    target_path="$(git_worktree_normalize_local_path "$target_path")"
     local source_vs_path="${main_repo_root}/src/.vs"
     local target_src_dir="${target_path}/src"
     local target_vs_path="${target_src_dir}/.vs"

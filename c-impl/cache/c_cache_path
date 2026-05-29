@@ -1,5 +1,5 @@
 #!/bin/bash
 
 c_cache_path() {
-    printf '%s/c.v3.cache\n' "${TBDIR:-/toolbox}"
+    printf '%s/c.v4.cache\n' "${TBDIR:-/toolbox}"
 }

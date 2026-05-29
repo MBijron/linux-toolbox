@@ -6,15 +6,15 @@ c_print_repo_map_rows() {
     local color_index=""
     local color_abbr=""
     local color_worktree_badge=""
+    local color_worktree_folder=""
     local color_name=""
     local color_archive_name=""
     local color_ticket=""
     local color_reset=""
     local active_name_color
-    local ticket_metadata
     local ticket_segment
-    local unused_ticket_abbreviation
-    local unused_base_name
+    local worktree_branch_name
+    local worktree_directory_name
     local name_column
     local raw_folder_name
     local name_label
@@ -34,14 +34,15 @@ c_print_repo_map_rows() {
         color_index=$'\033[1;32m'
         color_abbr=$'\033[1;36m'
         color_worktree_badge=$'\033[0;33m'
+        color_worktree_folder=$'\033[0;35m'
         color_name=$'\033[0;37m'
         color_archive_name=$'\033[0;90m'
         color_ticket=$'\033[0;90m'
         color_reset=$'\033[0m'
     fi
 
-    while IFS=$'\t' read -r repo_path folder_name abbreviation; do
-        if [[ -z "$repo_path" && -z "$folder_name" && -z "$abbreviation" ]]; then
+    while IFS=$'\t' read -r repo_path folder_name abbreviation worktree_branch_name worktree_directory_name; do
+        if [[ -z "$repo_path" && -z "$folder_name" && -z "$abbreviation" && -z "$worktree_branch_name" && -z "$worktree_directory_name" ]]; then
             continue
         fi
 
@@ -58,8 +59,13 @@ c_print_repo_map_rows() {
             active_name_color="$color_archive_name"
         fi
 
-        if ticket_metadata="$(c_worktree_entry_metadata "$repo_path" "$raw_folder_name" 2>/dev/null)"; then
-            IFS=$'\t' read -r ticket_segment unused_ticket_abbreviation unused_base_name <<< "$ticket_metadata"
+        if [[ -n "$worktree_branch_name" ]]; then
+            ticket_segment="$worktree_branch_name"
+        elif [[ "$repo_path" == */.w/* ]]; then
+            ticket_segment="$raw_folder_name"
+        fi
+
+        if [[ -n "$ticket_segment" ]]; then
             name_label="${color_worktree_badge}[w]${color_reset} ${active_name_color}${folder_name}"
         fi
 
@@ -78,9 +84,13 @@ c_print_repo_map_rows() {
             name_column=$(( (${#abbreviation} / 8) + 1 ))
             name_column=$(( name_column * 8 ))
             name_column=$(( name_column + 4 + prefix_column_width ))
-            printf '%*s%b%s%b\n' \
+            printf '%*s%b%s%b' \
                 "$name_column" '' \
                 "$color_ticket" "$ticket_segment" "$color_reset"
+            if [[ -n "$worktree_directory_name" ]]; then
+                printf ' %b(%s)%b' "$color_worktree_folder" "$worktree_directory_name" "$color_reset"
+            fi
+            printf '\n'
         fi
     done <<< "$rows"
 }

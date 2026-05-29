@@ -7,7 +7,9 @@ c_repo_map_entry_create() {
     local abbreviation_override="$4"
     local display_name="$raw_name"
     local worktree_metadata=""
+    local worktree_branch_name=""
     local worktree_base_name=""
+    local worktree_directory_name=""
     local abbreviation=""
 
     if [[ -z "$repo_path" ]]; then
@@ -28,8 +30,10 @@ c_repo_map_entry_create() {
             if [[ -n "$abbreviation_override" ]]; then
                 abbreviation="$abbreviation_override"
             elif worktree_metadata="$(c_worktree_entry_metadata "$repo_path" "$display_name" 2>/dev/null)"; then
+                worktree_branch_name="$(printf '%s\n' "$worktree_metadata" | awk -F '\t' '{print $1}')"
                 abbreviation="$(printf '%s\n' "$worktree_metadata" | awk -F '\t' '{print $2}')"
                 worktree_base_name="$(printf '%s\n' "$worktree_metadata" | awk -F '\t' '{print $3}')"
+                worktree_directory_name="$(printf '%s\n' "$worktree_metadata" | awk -F '\t' '{print $4}')"
                 if [[ -n "$worktree_base_name" ]]; then
                     display_name="$worktree_base_name"
                 fi
@@ -40,9 +44,9 @@ c_repo_map_entry_create() {
     esac
 
     if [[ -n "$modified_timestamp" ]]; then
-        printf '%s\t%s\t%s\t%s\n' "$modified_timestamp" "$repo_path" "$display_name" "$abbreviation"
+        printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$modified_timestamp" "$repo_path" "$display_name" "$abbreviation" "$worktree_branch_name" "$worktree_directory_name"
         return 0
     fi
 
-    printf '%s\t%s\t%s\n' "$repo_path" "$display_name" "$abbreviation"
+    printf '%s\t%s\t%s\t%s\t%s\n' "$repo_path" "$display_name" "$abbreviation" "$worktree_branch_name" "$worktree_directory_name"
 }

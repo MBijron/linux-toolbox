@@ -22,7 +22,7 @@ c_build_repo_map() {
                 folder_name="${repo_details%%$'\t'*}"
                 repo_path="${repo_details#*$'\t'}"
 
-                if [[ "$folder_name" == *.worktrees ]]; then
+                if [[ "$folder_name" == ".w" ]]; then
                     while IFS= read -r -d '' worktree_path; do
                         [[ -e "$worktree_path/.git" ]] || continue
                         worktree_name="${worktree_path##*/}"

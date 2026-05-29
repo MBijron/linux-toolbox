@@ -3,8 +3,12 @@
 c_worktree_entry_metadata() {
     local repo_path="$1"
     local raw_name="$2"
+    local metadata_path
+    local metadata_record
+    local repo_root
     local base_name
     local branch_path
+    local folder_name
     local ticket_prefix
     local ticket_remainder
     local ticket_digits
@@ -16,7 +20,17 @@ c_worktree_entry_metadata() {
         return 1
     fi
 
-    if [[ "$repo_path" == *".worktrees/"* ]]; then
+    if [[ "$repo_path" == */.w/* ]]; then
+        metadata_path="${repo_path%/*}/worktrees.tsv"
+        folder_name="${repo_path##*/}"
+        metadata_record="$(awk -F '\t' -v folder="$folder_name" 'NF >= 3 && $3 == folder { print $0; exit }' "$metadata_path" 2>/dev/null)"
+        if [[ -z "$metadata_record" ]]; then
+            return 1
+        fi
+        repo_root="$(printf '%s\n' "$metadata_record" | awk -F '\t' 'NF {print $1; exit}')"
+        branch_path="$(printf '%s\n' "$metadata_record" | awk -F '\t' 'NF {print $2; exit}')"
+        base_name="${repo_root##*/}"
+    elif [[ "$repo_path" == *".worktrees/"* ]]; then
         base_name="${repo_path%/*}"
         base_name="${base_name##*/}"
         base_name="${base_name%.worktrees}"
@@ -45,7 +59,7 @@ c_worktree_entry_metadata() {
                     ticket_initial="${ticket_initial,,}"
                 fi
                 abbreviation="${ticket_initial}${ticket_digits}"
-                printf '%s\t%s\t%s\n' "$branch_path" "$abbreviation" "$base_name"
+                printf '%s\t%s\t%s\t%s\n' "$branch_path" "$abbreviation" "$base_name" "$folder_name"
                 return 0
             fi
         fi
@@ -63,5 +77,5 @@ c_worktree_entry_metadata() {
         fi
     fi
 
-    printf '%s\t%s\t%s\n' "$branch_path" "$abbreviation" "$base_name"
+    printf '%s\t%s\t%s\t%s\n' "$branch_path" "$abbreviation" "$base_name" "$folder_name"
 }
