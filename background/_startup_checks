@@ -117,10 +117,11 @@ startup_toolbox_repo_check_run() {
     local lock_status
     local green=$'\033[0;32m'
     local yellow=$'\033[0;33m'
+    local grey=$'\033[90m'
     local reset=$'\033[0m'
 
-    if ! command -v git >/dev/null 2>&1; then
-        startup_checks_write_error "$result_path" 'Could not update /toolbox: git is not available.'
+    if ! command -v git.exe >/dev/null 2>&1; then
+        startup_checks_write_error "$result_path" 'Could not update /toolbox: git.exe is not available.'
         return 0
     fi
 
@@ -150,28 +151,28 @@ startup_toolbox_repo_check_run() {
         return 0
     fi
 
-    git_output="$(command git -c safe.directory="$repo_path" -C "$repo_path" rev-parse --is-inside-work-tree 2>&1)"
+    git_output="$(command git.exe -c safe.directory="$repo_path" -C "$repo_path" rev-parse --is-inside-work-tree 2>&1)"
     git_status=$?
     if [[ "$git_status" -ne 0 || "$git_output" != "true" ]]; then
         startup_checks_write_error "$result_path" 'Could not update /toolbox: repository validation failed.' "$git_output"
         return 0
     fi
 
-    git_output="$(GIT_TERMINAL_PROMPT=0 command git -c safe.directory="$repo_path" -C "$repo_path" fetch --quiet 2>&1)"
+    git_output="$(GIT_TERMINAL_PROMPT=0 command git.exe -c safe.directory="$repo_path" -C "$repo_path" fetch --quiet 2>&1)"
     git_status=$?
     if [[ "$git_status" -ne 0 ]]; then
         startup_checks_write_error "$result_path" 'Could not update /toolbox: git fetch failed.' "$git_output"
         return 0
     fi
 
-    local_commit="$(command git -c safe.directory="$repo_path" -C "$repo_path" rev-parse HEAD 2>&1)"
+    local_commit="$(command git.exe -c safe.directory="$repo_path" -C "$repo_path" rev-parse HEAD 2>&1)"
     git_status=$?
     if [[ "$git_status" -ne 0 ]]; then
         startup_checks_write_error "$result_path" 'Could not update /toolbox: the local commit could not be determined.' "$local_commit"
         return 0
     fi
 
-    remote_commit="$(command git -c safe.directory="$repo_path" -C "$repo_path" rev-parse '@{upstream}' 2>&1)"
+    remote_commit="$(command git.exe -c safe.directory="$repo_path" -C "$repo_path" rev-parse '@{upstream}' 2>&1)"
     git_status=$?
     if [[ "$git_status" -ne 0 ]]; then
         startup_checks_write_error "$result_path" 'Could not update /toolbox: the current branch has no usable upstream.' "$remote_commit"
@@ -180,7 +181,7 @@ startup_toolbox_repo_check_run() {
 
     [[ "$local_commit" == "$remote_commit" ]] && return 0
 
-    base_commit="$(command git -c safe.directory="$repo_path" -C "$repo_path" merge-base HEAD '@{upstream}' 2>&1)"
+    base_commit="$(command git.exe -c safe.directory="$repo_path" -C "$repo_path" merge-base HEAD '@{upstream}' 2>&1)"
     git_status=$?
     if [[ "$git_status" -ne 0 ]]; then
         startup_checks_write_error "$result_path" 'Could not update /toolbox: local and upstream history could not be compared.' "$base_commit"
@@ -190,7 +191,7 @@ startup_toolbox_repo_check_run() {
     # A locally-ahead branch has no upstream changes to pull.
     [[ "$remote_commit" == "$base_commit" ]] && return 0
 
-    worktree_status="$(command git -c safe.directory="$repo_path" -C "$repo_path" status --porcelain 2>&1)"
+    worktree_status="$(command git.exe -c safe.directory="$repo_path" -C "$repo_path" status --porcelain 2>&1)"
     git_status=$?
     if [[ "$git_status" -ne 0 ]]; then
         startup_checks_write_error "$result_path" 'Could not update /toolbox: working-tree status could not be read.' "$worktree_status"
@@ -202,28 +203,31 @@ startup_toolbox_repo_check_run() {
         return 0
     fi
 
-    old_short="$(command git -c safe.directory="$repo_path" -C "$repo_path" rev-parse --short HEAD 2>&1)"
+    old_short="$(command git.exe -c safe.directory="$repo_path" -C "$repo_path" rev-parse --short HEAD 2>&1)"
     git_status=$?
     if [[ "$git_status" -ne 0 ]]; then
         startup_checks_write_error "$result_path" 'Could not update /toolbox: the current revision could not be read.' "$old_short"
         return 0
     fi
 
-    git_output="$(GIT_TERMINAL_PROMPT=0 command git -c safe.directory="$repo_path" -C "$repo_path" pull --ff-only --quiet 2>&1)"
+    git_output="$(GIT_TERMINAL_PROMPT=0 command git.exe -c safe.directory="$repo_path" -C "$repo_path" pull --ff-only --quiet 2>&1)"
     git_status=$?
     if [[ "$git_status" -ne 0 ]]; then
         startup_checks_write_error "$result_path" 'Could not update /toolbox: git pull failed.' "$git_output"
         return 0
     fi
 
-    new_short="$(command git -c safe.directory="$repo_path" -C "$repo_path" rev-parse --short HEAD 2>&1)"
+    new_short="$(command git.exe -c safe.directory="$repo_path" -C "$repo_path" rev-parse --short HEAD 2>&1)"
     git_status=$?
     if [[ "$git_status" -ne 0 ]]; then
         startup_checks_write_error "$result_path" 'The /toolbox update completed, but its new revision could not be read.' "$new_short"
         return 0
     fi
 
-    printf '%bUpdated /toolbox (%s -> %s).%b\n' "$green" "$old_short" "$new_short" "$reset" > "$result_path" 2>/dev/null || true
+    {
+        printf '%bUpdated /toolbox (%s -> %s).%b\n' "$green" "$old_short" "$new_short" "$reset"
+        printf '%b%s%b\n' "$grey" 'Run tbr to refresh' "$reset"
+    } > "$result_path" 2>/dev/null || true
     return 0
 }
 
