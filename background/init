@@ -1,9 +1,18 @@
 #!/bin/bash
 
 background_init() {
+    local startup_output_target=""
+
     [[ "${TOOLBOX_SKIP_BACKGROUND_INIT:-0}" == "1" ]] && return 0
+
+    if [[ -t 2 ]]; then
+        startup_output_target="/proc/$$/fd/2"
+    fi
+
+    startup_checks_install_zle_handler >/dev/null 2>&1 || true
 
     c_background_start >/dev/null 2>&1 || true
     tbr_background_start >/dev/null 2>&1 || true
     windows_path_background_start >/dev/null 2>&1 || true
+    startup_checks_start "$startup_output_target" >/dev/null 2>&1 || true
 }

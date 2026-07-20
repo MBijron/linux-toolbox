@@ -2,7 +2,19 @@
 
 alias git="git.exe"
 
-__tb_now_ms() { command date +%s%N | cut -c1-13; }
+__tb_now_ms() {
+  local seconds
+  local fraction
+
+  if [ -n "${EPOCHREALTIME:-}" ]; then
+    seconds="${EPOCHREALTIME%.*}"
+    fraction="${EPOCHREALTIME#*.}000"
+    printf '%s%.3s\n' "$seconds" "$fraction"
+    return 0
+  fi
+
+  date +%s%3N
+}
 
 if [ -z "${__tb_start_ms:-}" ]; then
   __tb_start_ms=$(__tb_now_ms)
