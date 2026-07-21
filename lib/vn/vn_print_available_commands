@@ -1,0 +1,17 @@
+#!/bin/bash
+
+vn_print_available_commands() {
+    local file
+    local filename
+
+    printf '%s\n' 'Available virtual network commands:'
+
+    for file in "$TB_VIRTUAL_NETWORK_LOCATION"/*; do
+        [[ -f "$file" ]] || continue
+
+        filename="${file##*/}"
+        [[ "$filename" == *.* ]] && continue
+
+        printf '  %s\n' "$filename"
+    done
+}

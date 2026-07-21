@@ -3,7 +3,7 @@
 ## Command layout
 
 - Root command files in `/toolbox` stay thin and delegate to helper functions loaded at shell startup.
-- Most command logic lives under the shared `lib/<command>` root, with one function per file.
+- Most command logic lives under the shared `lib/<command>` root, with one function per extensionless file.
 - `xgit` is a dispatcher command that discovers aliases from `/toolbox/xgit_bin/git_*` files and invokes the matching `git_*` function.
 
 ## Repository navigation
@@ -12,7 +12,7 @@
 - `c` also reserves the exact queries `local` and `repos` to jump straight to `/mnt/*/localrepo` and `/mnt/*/repos`; when the folder does not exist on any eligible `/mnt/*` drive, it reuses the local-drive discovery rules to prompt for a drive, creates the folder, and then opens it.
 - `lib/c/models/c_repo_map_entry_create` normalizes each discovered folder into a display name and abbreviation.
 - `lib/c/text/c_abbreviate` generates abbreviations from folder names and treats dots like other word separators.
-- `xgit_bin/git_worktree` now creates worktrees under a sibling `.w/<folder-key>` directory beside the main repo, where the folder key is the ticket prefix from the last branch segment such as `CUAC-123` when present, otherwise a generated `LOC-<number>` value.
+- `xgit_bin/git_worktree` creates worktrees under a sibling `.w/<folder-key>` directory beside the main repo, where the folder key is the ticket prefix from the last branch segment such as `CUAC-123` when present, otherwise a generated `LOC-<number>` value.
 - `xgit_bin/git_worktree` keeps `.w/worktrees.tsv` as the authoritative repo/branch/folder mapping for that parent directory; `c` uses it to recover the real branch name and base repo name while the on-disk folder stays short.
 - `lib/c/text/c_worktree_entry_metadata` reads `.w/worktrees.tsv`, derives special shortcuts such as `c9666` from branch ticket prefixes like `CUAC-9666`, and falls back to a truncated regular abbreviation for non-ticket worktree branches.
 - `lib/c/models/c_repo_map_entry_create` stores the base repo name for worktree rows so `c` shows the repository name instead of the full worktree path.
@@ -33,8 +33,3 @@
 - `xgit_bin/git_worktree` refreshes the `c` repo-map cache after successful add/remove operations so new worktrees are immediately searchable.
 - `xgit_bin/git_worktree` finishes successful `xgit w checkout` runs by replacing `<worktree>/src/.vs` with a copy of `<main-repo>/src/.vs` when that source folder exists, and prints the sync source and destination paths clearly in the terminal.
 - When a helper must fall back to `git.exe` for a path argument on `/mnt/*`, it should convert the WSL path before invoking Git.
-
-## Repository skills
-
-- `.github/skills/windows-path-cache/SKILL.md` - Read when Windows wrapper commands such as `winwhere` disappear on startup or `/toolbox/bin` drops out of `PATH` after the Windows path cache is applied.
-- `.github/skills/xgit-worktree-layout/SKILL.md` - Read when changing `xgit w`, `.w/worktrees.tsv`, or `c` worktree discovery and rendering.
