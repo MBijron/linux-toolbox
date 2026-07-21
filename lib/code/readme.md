@@ -1,4 +1,4 @@
-# code-impl
+# lib/code
 
 - `code_print_help`: prints the `code` command help text.
 - `code_get_global_instructions_target`: returns the Windows path used by `code -i`.

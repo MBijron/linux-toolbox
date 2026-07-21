@@ -1,4 +1,4 @@
-# browse-impl cheat sheet
+# lib/browse cheat sheet
 
 `browse` opens URLs or file targets in Google Chrome from WSL.
 

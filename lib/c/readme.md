@@ -1,4 +1,4 @@
-# c-impl cheat sheet
+# lib/c cheat sheet
 
 `c` is split by responsibility. Start here before changing files.
 

@@ -1,4 +1,4 @@
-# tpub-impl cheat sheet
+# lib/tpub cheat sheet
 
 `tpub` maps requested tool arguments into the target names expected by `tbi quick`, then runs the quick installer with an optional target filter.
 

@@ -1,4 +1,4 @@
-# go-impl cheat sheet
+# lib/go cheat sheet
 
 `go` opens the current repository's `origin` remote in Chrome, or resolves another repository with `c`-style matching first.
 

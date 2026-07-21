@@ -15,7 +15,7 @@ c_read_repo_map_cache() {
         fi
     fi
 
-    if find "$toolbox_dir/c" "$toolbox_dir/c-impl" -type f -newer "$cache_path" -print -quit 2>/dev/null | grep -q .; then
+    if find "$toolbox_dir/c" "$toolbox_dir/lib/c" -type f -newer "$cache_path" -print -quit 2>/dev/null | grep -q .; then
         if command -v c_update_repo_map_cache >/dev/null 2>&1; then
             c_update_repo_map_cache >/dev/null 2>&1 || return 0
         fi

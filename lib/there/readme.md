@@ -1,4 +1,4 @@
-# there-impl cheat sheet
+# lib/there cheat sheet
 
 `there` resolves a PATH wrapper with `where`, reads that wrapper file, and returns the real executable or direct-call template behind it.
 

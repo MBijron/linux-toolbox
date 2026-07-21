@@ -1,4 +1,4 @@
-# tcall-impl cheat sheet
+# lib/tcall cheat sheet
 
 `tcall` resolves a toolbox wrapper through `there --call` and invokes the underlying tool directly.
 
