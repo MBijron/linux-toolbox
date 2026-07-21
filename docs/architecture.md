@@ -25,6 +25,7 @@
 ## Git helpers
 
 - `xgit_bin/` contains alias-addressable Git helpers such as branch switching and worktree management.
+- `background/_repository_updates` owns terminal-startup repository updates. Its top-level `TB_REPOSITORY_UPDATE_LOCATIONS` array pairs repository paths with display labels; missing paths are skipped, and its results are combined with the other startup notices by `background/_startup_checks`.
 - `xgit_bin/git_worktree` provides `xgit w checkout` and `xgit w remove`, creating sibling worktrees beside the main repository under `.w/<folder-key>` and resolving removals by branch name instead of the short on-disk folder name.
 - `xgit_bin/git_worktree` accepts both local branches and origin-only branches for `xgit w checkout`; when only `origin/<branch>` exists, it creates a local tracking branch directly in the new worktree.
 - `xgit_bin/git_worktree` also accepts `xgit w checkout -b <source-branch> <new-branch>` for new worktrees and, when only `xgit w checkout -b <new-branch>` is given, it automatically bases the new branch on the first available branch from `origin/develop`, `origin/master`, then `origin/main`; the create-branch path intentionally ignores local base branches so new worktrees start from the remote tip.

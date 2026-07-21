@@ -1,0 +1,174 @@
+#!/bin/bash
+
+TB_REPOSITORY_UPDATE_LOCATIONS=(
+    "${TBDIR:-/toolbox}"$'\t'"linux toolbox"
+    "${TB_VIRTUAL_NETWORK_LOCATION:-}"$'\t'"virtual network"
+)
+
+repository_updates_write_error() {
+    local result_path="$1"
+    local message="$2"
+    local detail="${3:-}"
+    local red=$'\033[0;31m'
+    local reset=$'\033[0m'
+
+    {
+        printf '%b%s%b\n' "$red" "$message" "$reset"
+        if [[ -n "$detail" ]]; then
+            printf '%b%s%b\n' "$red" "$detail" "$reset"
+        fi
+    } >> "$result_path" 2>/dev/null || true
+}
+
+repository_updates_run_one() {
+    local repo_path="$1"
+    local repo_label="$2"
+    local result_path="$3"
+    local git_output
+    local git_status
+    local worktree_status
+    local local_commit
+    local remote_commit
+    local base_commit
+    local old_short
+    local new_short
+    local green=$'\033[0;32m'
+    local yellow=$'\033[0;33m'
+    local grey=$'\033[90m'
+    local reset=$'\033[0m'
+
+    # Environment-backed locations are optional, so an unset or absent path is
+    # deliberately ignored rather than treated as a startup error.
+    [[ -n "$repo_path" && -d "$repo_path" ]] || return 0
+
+    if [[ ! -d "$repo_path/.git" ]]; then
+        repository_updates_write_error "$result_path" "Could not update $repo_label: $repo_path is not a Git repository."
+        return 0
+    fi
+
+    git_output="$(command git.exe -c safe.directory="$repo_path" -C "$repo_path" rev-parse --is-inside-work-tree 2>&1)"
+    git_status=$?
+    if [[ "$git_status" -ne 0 || "$git_output" != "true" ]]; then
+        repository_updates_write_error "$result_path" "Could not update $repo_label: repository validation failed." "$git_output"
+        return 0
+    fi
+
+    git_output="$(GIT_TERMINAL_PROMPT=0 command git.exe -c safe.directory="$repo_path" -C "$repo_path" fetch --quiet 2>&1)"
+    git_status=$?
+    if [[ "$git_status" -ne 0 ]]; then
+        repository_updates_write_error "$result_path" "Could not update $repo_label: git fetch failed." "$git_output"
+        return 0
+    fi
+
+    local_commit="$(command git.exe -c safe.directory="$repo_path" -C "$repo_path" rev-parse HEAD 2>&1)"
+    git_status=$?
+    if [[ "$git_status" -ne 0 ]]; then
+        repository_updates_write_error "$result_path" "Could not update $repo_label: the local commit could not be determined." "$local_commit"
+        return 0
+    fi
+
+    remote_commit="$(command git.exe -c safe.directory="$repo_path" -C "$repo_path" rev-parse '@{upstream}' 2>&1)"
+    git_status=$?
+    if [[ "$git_status" -ne 0 ]]; then
+        repository_updates_write_error "$result_path" "Could not update $repo_label: the current branch has no usable upstream." "$remote_commit"
+        return 0
+    fi
+
+    [[ "$local_commit" == "$remote_commit" ]] && return 0
+
+    base_commit="$(command git.exe -c safe.directory="$repo_path" -C "$repo_path" merge-base HEAD '@{upstream}' 2>&1)"
+    git_status=$?
+    if [[ "$git_status" -ne 0 ]]; then
+        repository_updates_write_error "$result_path" "Could not update $repo_label: local and upstream history could not be compared." "$base_commit"
+        return 0
+    fi
+
+    # A locally-ahead branch has no upstream changes to pull.
+    [[ "$remote_commit" == "$base_commit" ]] && return 0
+
+    worktree_status="$(command git.exe -c safe.directory="$repo_path" -C "$repo_path" status --porcelain 2>&1)"
+    git_status=$?
+    if [[ "$git_status" -ne 0 ]]; then
+        repository_updates_write_error "$result_path" "Could not update $repo_label: working-tree status could not be read." "$worktree_status"
+        return 0
+    fi
+
+    if [[ -n "$worktree_status" ]]; then
+        printf '%bAn update for %s is available, but it cannot be applied because there are uncommitted changes.%b\n' \
+            "$yellow" "$repo_label" "$reset" >> "$result_path" 2>/dev/null || true
+        return 0
+    fi
+
+    old_short="$(command git.exe -c safe.directory="$repo_path" -C "$repo_path" rev-parse --short HEAD 2>&1)"
+    git_status=$?
+    if [[ "$git_status" -ne 0 ]]; then
+        repository_updates_write_error "$result_path" "Could not update $repo_label: the current revision could not be read." "$old_short"
+        return 0
+    fi
+
+    git_output="$(GIT_TERMINAL_PROMPT=0 command git.exe -c safe.directory="$repo_path" -C "$repo_path" pull --ff-only --quiet 2>&1)"
+    git_status=$?
+    if [[ "$git_status" -ne 0 ]]; then
+        repository_updates_write_error "$result_path" "Could not update $repo_label: git pull failed." "$git_output"
+        return 0
+    fi
+
+    new_short="$(command git.exe -c safe.directory="$repo_path" -C "$repo_path" rev-parse --short HEAD 2>&1)"
+    git_status=$?
+    if [[ "$git_status" -ne 0 ]]; then
+        repository_updates_write_error "$result_path" "The $repo_label update completed, but its new revision could not be read." "$new_short"
+        return 0
+    fi
+
+    printf '%bUpdated %s (%s -> %s).%b\n' "$green" "$repo_label" "$old_short" "$new_short" "$reset" \
+        >> "$result_path" 2>/dev/null || true
+
+    if [[ "$repo_label" == "linux toolbox" ]]; then
+        printf '%b%s%b\n' "$grey" 'Run tbr to refresh' "$reset" >> "$result_path" 2>/dev/null || true
+    fi
+
+    return 0
+}
+
+repository_updates_run() {
+    local result_path="$1"
+    local lock_path="${TMPDIR:-/tmp}/toolbox-startup-update.lock"
+    local entry
+    local repo_path
+    local repo_label
+    local lock_status
+
+    if ! command -v git.exe >/dev/null 2>&1; then
+        repository_updates_write_error "$result_path" 'Could not update configured repositories: git.exe is not available.'
+        return 0
+    fi
+
+    if ! command -v flock >/dev/null 2>&1; then
+        repository_updates_write_error "$result_path" 'Could not update configured repositories: flock is not available.'
+        return 0
+    fi
+
+    if ! exec 9> "$lock_path"; then
+        repository_updates_write_error "$result_path" 'Could not update configured repositories: the update lock could not be opened.'
+        return 0
+    fi
+
+    command flock -n -E 75 9 >/dev/null 2>&1
+    lock_status=$?
+    if [[ "$lock_status" -eq 75 ]]; then
+        # Another terminal is already performing the same transient updates.
+        return 0
+    fi
+    if [[ "$lock_status" -ne 0 ]]; then
+        repository_updates_write_error "$result_path" 'Could not update configured repositories: the update lock could not be acquired.'
+        return 0
+    fi
+
+    for entry in "${TB_REPOSITORY_UPDATE_LOCATIONS[@]}"; do
+        repo_path="${entry%%$'\t'*}"
+        repo_label="${entry#*$'\t'}"
+        repository_updates_run_one "$repo_path" "$repo_label" "$result_path"
+    done
+
+    return 0
+}

@@ -102,145 +102,16 @@ startup_tbi_check_run() {
     return 0
 }
 
-startup_toolbox_repo_check_run() {
-    local result_path="$1"
-    local repo_path="${TBDIR:-/toolbox}"
-    local lock_path="${TMPDIR:-/tmp}/toolbox-startup-update.lock"
-    local git_output
-    local git_status
-    local worktree_status
-    local local_commit
-    local remote_commit
-    local base_commit
-    local old_short
-    local new_short
-    local lock_status
-    local green=$'\033[0;32m'
-    local yellow=$'\033[0;33m'
-    local grey=$'\033[90m'
-    local reset=$'\033[0m'
-
-    if ! command -v git.exe >/dev/null 2>&1; then
-        startup_checks_write_error "$result_path" 'Could not update /toolbox: git.exe is not available.'
-        return 0
-    fi
-
-    if ! command -v flock >/dev/null 2>&1; then
-        startup_checks_write_error "$result_path" 'Could not update /toolbox: flock is not available.'
-        return 0
-    fi
-
-    if [[ ! -d "$repo_path/.git" ]]; then
-        startup_checks_write_error "$result_path" 'Could not update /toolbox: it is not a Git repository.'
-        return 0
-    fi
-
-    if ! exec 9> "$lock_path"; then
-        startup_checks_write_error "$result_path" 'Could not update /toolbox: the update lock could not be opened.'
-        return 0
-    fi
-
-    command flock -n -E 75 9 >/dev/null 2>&1
-    lock_status=$?
-    if [[ "$lock_status" -eq 75 ]]; then
-        # Another terminal is already performing the same transient update.
-        return 0
-    fi
-    if [[ "$lock_status" -ne 0 ]]; then
-        startup_checks_write_error "$result_path" 'Could not update /toolbox: the update lock could not be acquired.'
-        return 0
-    fi
-
-    git_output="$(command git.exe -c safe.directory="$repo_path" -C "$repo_path" rev-parse --is-inside-work-tree 2>&1)"
-    git_status=$?
-    if [[ "$git_status" -ne 0 || "$git_output" != "true" ]]; then
-        startup_checks_write_error "$result_path" 'Could not update /toolbox: repository validation failed.' "$git_output"
-        return 0
-    fi
-
-    git_output="$(GIT_TERMINAL_PROMPT=0 command git.exe -c safe.directory="$repo_path" -C "$repo_path" fetch --quiet 2>&1)"
-    git_status=$?
-    if [[ "$git_status" -ne 0 ]]; then
-        startup_checks_write_error "$result_path" 'Could not update /toolbox: git fetch failed.' "$git_output"
-        return 0
-    fi
-
-    local_commit="$(command git.exe -c safe.directory="$repo_path" -C "$repo_path" rev-parse HEAD 2>&1)"
-    git_status=$?
-    if [[ "$git_status" -ne 0 ]]; then
-        startup_checks_write_error "$result_path" 'Could not update /toolbox: the local commit could not be determined.' "$local_commit"
-        return 0
-    fi
-
-    remote_commit="$(command git.exe -c safe.directory="$repo_path" -C "$repo_path" rev-parse '@{upstream}' 2>&1)"
-    git_status=$?
-    if [[ "$git_status" -ne 0 ]]; then
-        startup_checks_write_error "$result_path" 'Could not update /toolbox: the current branch has no usable upstream.' "$remote_commit"
-        return 0
-    fi
-
-    [[ "$local_commit" == "$remote_commit" ]] && return 0
-
-    base_commit="$(command git.exe -c safe.directory="$repo_path" -C "$repo_path" merge-base HEAD '@{upstream}' 2>&1)"
-    git_status=$?
-    if [[ "$git_status" -ne 0 ]]; then
-        startup_checks_write_error "$result_path" 'Could not update /toolbox: local and upstream history could not be compared.' "$base_commit"
-        return 0
-    fi
-
-    # A locally-ahead branch has no upstream changes to pull.
-    [[ "$remote_commit" == "$base_commit" ]] && return 0
-
-    worktree_status="$(command git.exe -c safe.directory="$repo_path" -C "$repo_path" status --porcelain 2>&1)"
-    git_status=$?
-    if [[ "$git_status" -ne 0 ]]; then
-        startup_checks_write_error "$result_path" 'Could not update /toolbox: working-tree status could not be read.' "$worktree_status"
-        return 0
-    fi
-
-    if [[ -n "$worktree_status" ]]; then
-        printf '%b%s%b\n' "$yellow" 'A /toolbox update is available, but it cannot be applied because there are uncommitted changes.' "$reset" > "$result_path" 2>/dev/null || true
-        return 0
-    fi
-
-    old_short="$(command git.exe -c safe.directory="$repo_path" -C "$repo_path" rev-parse --short HEAD 2>&1)"
-    git_status=$?
-    if [[ "$git_status" -ne 0 ]]; then
-        startup_checks_write_error "$result_path" 'Could not update /toolbox: the current revision could not be read.' "$old_short"
-        return 0
-    fi
-
-    git_output="$(GIT_TERMINAL_PROMPT=0 command git.exe -c safe.directory="$repo_path" -C "$repo_path" pull --ff-only --quiet 2>&1)"
-    git_status=$?
-    if [[ "$git_status" -ne 0 ]]; then
-        startup_checks_write_error "$result_path" 'Could not update /toolbox: git pull failed.' "$git_output"
-        return 0
-    fi
-
-    new_short="$(command git.exe -c safe.directory="$repo_path" -C "$repo_path" rev-parse --short HEAD 2>&1)"
-    git_status=$?
-    if [[ "$git_status" -ne 0 ]]; then
-        startup_checks_write_error "$result_path" 'The /toolbox update completed, but its new revision could not be read.' "$new_short"
-        return 0
-    fi
-
-    {
-        printf '%bUpdated /toolbox (%s -> %s).%b\n' "$green" "$old_short" "$new_short" "$reset"
-        printf '%b%s%b\n' "$grey" 'Run tbr to refresh' "$reset"
-    } > "$result_path" 2>/dev/null || true
-    return 0
-}
-
 startup_checks_run() {
     local output_target="$1"
     local terminal_shell_pid="$2"
     local notice_path="$3"
     local temporary_dir
-    local repo_result
+    local repository_result
     local tbi_result
-    local repo_pid
+    local repository_pid
     local tbi_pid
-    local repo_status
+    local repository_status
     local tbi_status
 
     temporary_dir="$(mktemp -d "${TMPDIR:-/tmp}/toolbox-startup-checks.XXXXXX" 2>/dev/null)"
@@ -250,37 +121,37 @@ startup_checks_run() {
         return 0
     fi
 
-    repo_result="$temporary_dir/repo"
+    repository_result="$temporary_dir/repositories"
     tbi_result="$temporary_dir/tbi"
 
-    startup_toolbox_repo_check_run "$repo_result" &
-    repo_pid=$!
+    repository_updates_run "$repository_result" &
+    repository_pid=$!
     startup_tbi_check_run "$tbi_result" &
     tbi_pid=$!
 
-    wait "$repo_pid" >/dev/null 2>&1
-    repo_status=$?
+    wait "$repository_pid" >/dev/null 2>&1
+    repository_status=$?
     wait "$tbi_pid" >/dev/null 2>&1
     tbi_status=$?
 
-    if [[ "$repo_status" -ne 0 && ! -s "$repo_result" ]]; then
-        startup_checks_write_error "$repo_result" "Could not update /toolbox: the background repository check exited with status $repo_status."
+    if [[ "$repository_status" -ne 0 && ! -s "$repository_result" ]]; then
+        startup_checks_write_error "$repository_result" "Could not update configured repositories: the background check exited with status $repository_status."
     fi
     if [[ "$tbi_status" -ne 0 && ! -s "$tbi_result" ]]; then
         printf '%s\n' "Could not perform 'tbi outdated' check, make sure 'tbi check' is available" > "$tbi_result" 2>/dev/null || true
     fi
 
-    if [[ -s "$repo_result" || -s "$tbi_result" ]]; then
+    if [[ -s "$repository_result" || -s "$tbi_result" ]]; then
         {
-            [[ -s "$repo_result" ]] && command cat -- "$repo_result"
-            if [[ -s "$repo_result" && -s "$tbi_result" ]]; then
+            [[ -s "$repository_result" ]] && command cat -- "$repository_result"
+            if [[ -s "$repository_result" && -s "$tbi_result" ]]; then
                 printf '\n'
             fi
             [[ -s "$tbi_result" ]] && command cat -- "$tbi_result"
         } | startup_checks_publish "$notice_path" "$terminal_shell_pid" "$output_target"
     fi
 
-    command rm -f -- "$repo_result" "$tbi_result" >/dev/null 2>&1 || true
+    command rm -f -- "$repository_result" "$tbi_result" >/dev/null 2>&1 || true
     command rmdir -- "$temporary_dir" >/dev/null 2>&1 || true
     return 0
 }
